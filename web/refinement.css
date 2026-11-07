@@ -308,19 +308,6 @@
     font-size: 12px;
     color: var(--muted);
   }
-  .crm-stat:first-child {
-    background: #252e40;
-    border-color: #252e40;
-    color: white;
-  }
-  .crm-stat:first-child .stat-label,
-  .crm-stat:first-child > small {
-    color: #c5ccda;
-  }
-  .crm-stat:first-child .stat-label > span {
-    background: #3b455a;
-    color: #d5e0ff;
-  }
   .overview-control {
     margin-bottom: 16px;
     color: var(--muted);
