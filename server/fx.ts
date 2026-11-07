@@ -1,13 +1,7 @@
 import { BadRequestException } from "@nestjs/common";
 import { read, transaction, uid, Store, RecordData } from "./db";
-import { User, allow } from "./auth";
-export const chinaDay = (date = new Date()) =>
-  new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
+import { chinaDay, queryReferenceRate } from "./fx-provider";
+export { chinaDay } from "./fx-provider";
 export const stale = (r: RecordData, now = new Date()) =>
   Math.floor((Date.parse(chinaDay(now)) - Date.parse(r.date)) / 86400000) > 7;
 export async function latestRate(db: Store) {
@@ -22,10 +16,12 @@ export async function latestRate(db: Store) {
     .filter(
       (x) => !x.manual && !x.simulated && !x.invalid && x.date <= chinaDay(),
     )
-    .sort((a, b) =>
-      String(b.fetchedAt || b.date).localeCompare(
-        String(a.fetchedAt || a.date),
-      ),
+    .sort(
+      (a, b) =>
+        String(b.date).localeCompare(String(a.date)) ||
+        String(b.fetchedAt || b.date).localeCompare(
+          String(a.fetchedAt || a.date),
+        ),
     );
   return automatic[0] || rates.filter((x) => x.simulated).at(-1);
 }
@@ -39,57 +35,50 @@ export function refreshRates(actor: string): Promise<RecordData> {
 }
 async function fetchRate(actor: string) {
   let lastError = "汇率服务暂不可用";
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const response = await fetch(
-        "https://api.frankfurter.dev/v2/rate/USD/CNY",
-        { signal: AbortSignal.timeout(7000) },
+  try {
+    const raw = await queryReferenceRate();
+    return await transaction(async (db) => {
+      const source = "Frankfurter v2 · blended reference";
+      const existing = (await db.all("rates")).find(
+        (r) =>
+          r.source === source &&
+          !r.invalid &&
+          !r.simulated &&
+          !r.manual &&
+          r.base === "USD" &&
+          r.quote === "CNY" &&
+          r.date === raw.date &&
+          r.rate === String(raw.rate),
       );
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const raw = (await response.json()) as any;
-      if (
-        raw.base !== "USD" ||
-        raw.quote !== "CNY" ||
-        !/^\d{4}-\d{2}-\d{2}$/.test(raw.date) ||
-        !Number.isFinite(Number(raw.rate)) ||
-        Number(raw.rate) <= 0 ||
-        !Number.isFinite(Date.parse(raw.date)) ||
-        raw.date > chinaDay()
-      )
-        throw new Error("Invalid provider response");
-      return await transaction(async (db) => {
-        const source = "Frankfurter v2 · blended reference";
-        const existing = (await db.all("rates")).find(
-          (r) =>
-            r.source === source &&
-            r.date === raw.date &&
-            r.rate === String(raw.rate),
-        );
-        const value =
-          existing ||
-          (await db.put("rates", {
-            id: uid("FX"),
-            base: "USD",
-            quote: "CNY",
-            rate: String(raw.rate),
-            source,
-            date: raw.date,
-            fetchedAt: new Date().toISOString(),
-            simulated: false,
-          }));
-        await db.put("settings", {
-          id: "fx-status",
-          checkedAt: new Date().toISOString(),
-          successDay: chinaDay(),
-          successSlot: scheduleSlot(),
-          error: null,
-        });
-        await db.audit(actor, "refresh reference exchange rate", value.id);
-        return value;
+      const value =
+        existing ||
+        (await db.put("rates", {
+          id: uid("FX"),
+          base: "USD",
+          quote: "CNY",
+          rate: String(raw.rate),
+          source,
+          date: raw.date,
+          fetchedAt: new Date().toISOString(),
+          simulated: false,
+          requestedDate: raw.requestedDate,
+        }));
+      await db.put("settings", {
+        id: "fx-status",
+        checkedAt: new Date().toISOString(),
+        successDay: chinaDay(),
+        successSlot: scheduleSlot(),
+        error: null,
+        requestedDate: raw.requestedDate,
+        dataDate: raw.date,
+        rateId: value.id,
+        attempts: raw.attempts,
       });
-    } catch (e) {
-      lastError = (e as Error).message;
-    }
+      await db.audit(actor, "refresh reference exchange rate", value.id);
+      return value;
+    });
+  } catch (e) {
+    lastError = (e as Error).message;
   }
   await transaction((db) =>
     db.put("settings", {

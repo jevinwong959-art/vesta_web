@@ -423,6 +423,21 @@ test("provider refresh deduplicates, versions corrections, preserves cache on fa
       });
     const revised = await fx.refreshRates("test");
     assert.notEqual(revised.id, a.id);
+    const success = await db.read((s) => s.get("settings", "fx-status"));
+    assert.equal(success.error, null);
+    assert.equal(success.dataDate, revised.date);
+    assert.equal(success.requestedDate, fx.chinaDay());
+    assert.equal(success.rateId, revised.id);
+    // An older observation fetched later must not replace a newer data date.
+    globalThis.fetch = async () =>
+      Response.json({
+        base: "USD",
+        quote: "CNY",
+        rate: 7.1,
+        date: "2026-11-05",
+      });
+    await fx.refreshRates("test");
+    assert.equal((await db.read((s) => fx.latestRate(s))).id, revised.id);
     const count = (
       await client.query("SELECT count(*) FROM records WHERE kind='rates'")
     ).rows[0].count;
@@ -430,6 +445,11 @@ test("provider refresh deduplicates, versions corrections, preserves cache on fa
       throw new Error("offline fixture");
     };
     await assert.rejects(fx.refreshRates("test"), /offline fixture/);
+    assert.match(
+      (await db.read((s) => s.get("settings", "fx-status"))).error,
+      /offline fixture/,
+    );
+    assert.equal((await db.read((s) => fx.latestRate(s))).id, revised.id);
     assert.equal(
       (await client.query("SELECT count(*) FROM records WHERE kind='rates'"))
         .rows[0].count,
