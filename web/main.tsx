@@ -205,6 +205,9 @@ function App() {
     sales = ["owner", "manager", "sales"].includes(user?.role || ""),
     finance = user?.role === "owner",
     warehouse = user?.role === "manager";
+  useEffect(() => {
+    document.documentElement.lang = user && en ? "en" : "zh-CN";
+  }, [user, en]);
   async function api(path: string, body?: any) {
     const r = await fetch("/api/v1/" + path, {
       method: body === undefined ? "GET" : "POST",
@@ -276,6 +279,7 @@ function App() {
         if (r.ok && !new URLSearchParams(location.search).has("reset"))
           setUser(await r.json());
       })
+      .catch(() => setError("无法连接本机服务，请检查服务后重新登录。"))
       .finally(() => setReady(true));
   }, []);
   useEffect(() => {
@@ -1386,7 +1390,10 @@ function App() {
           {error && (
             <div role="alert" className="alert error">
               <span>{error}</span>
-              <button onClick={() => setError("")}>
+              <button
+                aria-label={T("关闭错误提示", "Dismiss error")}
+                onClick={() => setError("")}
+              >
                 <X size={16} />
               </button>
             </div>
@@ -2283,6 +2290,7 @@ function App() {
               </div>
               {sales && (
                 <ContractUpload
+                  en={en}
                   orders={orderOptions}
                   contracts={rows("contracts")}
                   send={async (b) => {
@@ -2662,6 +2670,7 @@ function App() {
       </main>
       {importKind && (
         <ImportModal
+          en={en}
           kind={importKind}
           api={api}
           onClose={() => setImportKind(null)}
@@ -2673,6 +2682,7 @@ function App() {
       )}
       {form && (
         <FormModal
+          en={en}
           form={form}
           products={rows("products")}
           rates={rows("rates")}
@@ -2988,7 +2998,11 @@ function App() {
                   · {detail.id}
                 </h2>
               </div>
-              <button className="icon-btn" onClick={() => setDetail(null)}>
+              <button
+                className="icon-btn"
+                aria-label={T("关闭", "Close")}
+                onClick={() => setDetail(null)}
+              >
                 <X />
               </button>
             </div>
@@ -3360,6 +3374,7 @@ function Login({
   );
 }
 function FormModal({
+  en,
   form,
   products,
   rates,
@@ -3368,6 +3383,7 @@ function FormModal({
   onError,
   onSuccess,
 }: {
+  en: boolean;
   form: Form;
   products: Row[];
   rates: Row[];
@@ -3404,7 +3420,11 @@ function FormModal({
       <section className="modal wide">
         <div className="modal-head">
           <h2>{form.title}</h2>
-          <button className="icon-btn" onClick={onClose}>
+          <button
+            className="icon-btn"
+            aria-label={en ? "Close" : "关闭"}
+            onClick={onClose}
+          >
             <X />
           </button>
         </div>
@@ -3559,6 +3579,11 @@ function FormModal({
                       type="button"
                       className="icon-btn"
                       disabled={allocations.length === 1}
+                      aria-label={
+                        en
+                          ? `Remove allocation ${i + 1}`
+                          : `移除第${i + 1}项核销`
+                      }
                       onClick={() =>
                         setAllocations(allocations.filter((_, j) => i !== j))
                       }
@@ -3717,6 +3742,11 @@ function FormModal({
                       type="button"
                       className="icon-btn"
                       disabled={items.length === 1}
+                      aria-label={
+                        en
+                          ? `Remove product ${index + 1}`
+                          : `移除第${index + 1}项商品`
+                      }
                       onClick={() =>
                         setItems(items.filter((_, n) => n !== index))
                       }
@@ -3748,7 +3778,11 @@ function FormModal({
                 </button>
               </div>
             )}
-            {error && <div className="alert error section-gap">{error}</div>}
+            {error && (
+              <div role="alert" className="alert error section-gap">
+                {error}
+              </div>
+            )}
           </div>
           <div className="modal-actions">
             <button type="button" className="btn" onClick={onClose}>
@@ -3764,11 +3798,13 @@ function FormModal({
   );
 }
 function ContractUpload({
+  en,
   orders,
   contracts,
   send,
   onError,
 }: {
+  en: boolean;
   orders: { value: string; label: string }[];
   contracts: Row[];
   send: (v: any) => Promise<void>;
@@ -3829,7 +3865,19 @@ function ContractUpload({
         <option value="draft">待签署</option>
         <option value="signed">已签署</option>
       </select>
-      <input name="file" type="file" accept="application/pdf" required />
+      <label className="upload-file">
+        {en ? "Contract PDF" : "合同 PDF 文件"}
+        <input
+          name="file"
+          type="file"
+          accept="application/pdf"
+          required
+          aria-describedby="contract-file-hint"
+        />
+        <small id="contract-file-hint">
+          {en ? "PDF only, up to 5 MB." : "仅支持 PDF，最大 5 MB。"}
+        </small>
+      </label>
       <button className="btn primary" disabled={busy || !orders.length}>
         上传合同
       </button>
@@ -3838,11 +3886,13 @@ function ContractUpload({
 }
 
 function ImportModal({
+  en,
   kind,
   api,
   onClose,
   onDone,
 }: {
+  en: boolean;
   kind: string;
   api: (path: string, body?: any) => Promise<any>;
   onClose: () => void;
@@ -3856,7 +3906,11 @@ function ImportModal({
       <section className="modal wide">
         <div className="modal-head">
           <h2>{kind === "products" ? "产品" : "客户"} CSV 导入</h2>
-          <button className="icon-btn" onClick={onClose}>
+          <button
+            className="icon-btn"
+            aria-label={en ? "Close" : "关闭"}
+            onClick={onClose}
+          >
             <X />
           </button>
         </div>

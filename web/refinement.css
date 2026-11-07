@@ -5,7 +5,7 @@
     --green: #2855d9;
     --teal: #2855d9;
     --ink: #202631;
-    --muted: #657080;
+    --muted: #596575;
     --line: #e2e6ed;
     --canvas: #f5f6f8;
     --surface: #fff;
@@ -66,13 +66,13 @@
   }
   .nav-caption {
     margin: 32px 12px 12px;
-    color: #7b8492;
+    color: var(--muted);
     font-size: 10px;
     letter-spacing: 1px;
   }
   .nav-section {
     padding: 24px 12px 10px;
-    color: #7b8492;
+    color: var(--muted);
     font-size: 11px;
   }
   .sidebar nav {
@@ -112,7 +112,7 @@
     border: 0;
     border-radius: 8px;
     background: var(--surface-soft);
-    color: #657080;
+    color: var(--muted);
     padding: 12px;
   }
   .local-label small {
@@ -164,7 +164,7 @@
   }
   .page-heading .eyebrow {
     font-size: 10px;
-    color: #7b8492;
+    color: var(--muted);
     font-weight: 500;
     letter-spacing: 1.3px;
   }
@@ -254,7 +254,27 @@
   }
   input::placeholder,
   textarea::placeholder {
-    color: #7a8494;
+    color: var(--muted);
+  }
+  /* Shared business labels and SKU captions must survive the legacy theme. */
+  label,
+  .product-art span,
+  .workspace th,
+  .empty h3,
+  .empty p {
+    color: var(--muted);
+  }
+  .upload-file {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .upload-file input {
+    width: 100%;
+    min-width: 0;
+  }
+  .alert,
+  .modal-head h2 {
+    overflow-wrap: anywhere;
   }
   .card,
   .product-card {
@@ -347,7 +367,7 @@
   }
   .stage-flow span {
     display: block;
-    color: #9da8bd;
+    color: var(--muted);
     font-size: 10px;
     top: auto;
     bottom: 23px;
@@ -379,7 +399,7 @@
     font-size: 12px;
   }
   .chart-legend span + span {
-    color: #657aa8;
+    color: #52658d;
   }
   .chart-details {
     border-top: 1px solid var(--line);
@@ -587,7 +607,7 @@
     color: var(--muted);
   }
   .workspace footer {
-    color: #788293;
+    color: var(--muted);
     border-color: var(--line);
   }
   /* Customer-facing catalogue shares the same type and controls. */
@@ -608,7 +628,7 @@
     color: var(--muted);
   }
   .portal-layout .sidebar .nav-item {
-    color: #657080;
+    color: var(--muted);
     border-radius: 6px;
   }
   .portal-layout .sidebar .nav-item.active {
@@ -639,7 +659,7 @@
     letter-spacing: -1px;
   }
   .portal-welcome > div > small {
-    color: #5d7193;
+    color: #526789;
     letter-spacing: 1px;
   }
   .portal-welcome p {
@@ -669,7 +689,7 @@
   }
   .filter-chips button {
     border-radius: 6px;
-    color: #657080;
+    color: var(--muted);
     border-color: var(--line);
     font-size: 13px;
   }
@@ -707,7 +727,7 @@
     padding: 24px;
   }
   .product-info > small {
-    color: #6e7c92;
+    color: var(--muted);
     font-size: 11px;
     letter-spacing: 1px;
   }
