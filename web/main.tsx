@@ -28,11 +28,11 @@ import {
   Activity,
   Menu,
 } from "lucide-react";
-import "./style.css";
-import "./prototype.css";
-import "./parity.css";
-import "./refinement.css";
+import "./tokens.css";
+import "./screen.css";
+import "./print.css";
 import { ModalAccess } from "./modal-access";
+import { useMobileNavigation } from "./mobile-navigation";
 import { businessDay, businessNow, setReferenceDate } from "./clock";
 import {
   BusinessDetail,
@@ -213,6 +213,11 @@ function App() {
     sales = ["owner", "manager", "sales"].includes(user?.role || ""),
     finance = user?.role === "owner",
     warehouse = user?.role === "manager";
+  const { navigationRef, triggerRef } = useMobileNavigation(
+    mobile,
+    setMobile,
+    Boolean(user && !portal),
+  );
   useEffect(() => {
     document.documentElement.lang = user && en ? "en" : "zh-CN";
   }, [user, en]);
@@ -1109,11 +1114,27 @@ function App() {
       {mobile && !portal && (
         <button
           className="navigation-shade"
+          tabIndex={-1}
           aria-label={T("收起导航", "Dismiss navigation")}
           onClick={() => setMobile(false)}
         />
       )}
-      <aside className={mobile ? "sidebar mobile-open" : "sidebar"}>
+      <aside
+        ref={navigationRef}
+        className={mobile ? "sidebar mobile-open" : "sidebar"}
+        role={mobile && !portal ? "dialog" : undefined}
+        aria-modal={mobile && !portal ? true : undefined}
+        aria-label={T("主导航", "Main navigation")}
+      >
+        {!portal && (
+          <button
+            className="icon-btn navigation-close"
+            aria-label={T("关闭导航菜单", "Close navigation")}
+            onClick={() => setMobile(false)}
+          >
+            <X size={20} />
+          </button>
+        )}
         <a
           className="brand"
           href="#"
@@ -1198,6 +1219,7 @@ function App() {
           <div className="breadcrumb">
             <button
               className="icon-btn mobile-toggle"
+              ref={triggerRef}
               aria-label={
                 mobile
                   ? T("关闭导航菜单", "Close navigation")

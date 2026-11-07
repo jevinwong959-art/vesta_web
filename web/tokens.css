@@ -1,0 +1,44 @@
+/* Authoritative screen theme. Print owns a separate, fixed document palette. */
+@media screen {
+  :root {
+    font-synthesis: none;
+    font-weight: 400;
+    font-size: 14px;
+    line-height: 1.6;
+    --accent: #2855d9;
+    --accent-hover: #2046b8;
+    --text-meta: 12px;
+    --text-ui: 13px;
+    --ink: #202631;
+    --muted: #596575;
+    --line: #e2e6ed;
+    --canvas: #f5f6f8;
+    --surface: #fff;
+    --surface-soft: #f8f9fb;
+    --accent-soft: #edf2ff;
+    --sidebar-width: 240px;
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: var(--ink);
+    background: var(--canvas);
+    -webkit-font-smoothing: antialiased;
+    --control-border: #7c8797;
+    --control-readonly: #f5f6f8;
+    --status-success-ink: #237553;
+    --status-success-surface: #edf7f0;
+    --status-warning-ink: #99631d;
+    --status-warning-surface: #fff5df;
+    --status-error-ink: #aa5f4c;
+    --status-error-surface: #fff0eb;
+    --status-error-border: #f0d7cd;
+    --notice-ink: #53627c;
+    --notice-surface: #f3f6fc;
+    --notice-border: #dfe7f7;
+    --toast-surface: #245840;
+    --on-accent: #fff;
+    --login-surface: #232d42;
+    --login-ink: #bec9dd;
+    --login-muted: #afbdd4;
+    --navigation-overlay: #1d293d66;
+    --dialog-overlay: #19213265;
+  }
+}

@@ -15,7 +15,10 @@ export function ModalAccess() {
       );
       const next =
         overlays.at(-1)?.querySelector<HTMLElement>(".modal") || null;
-      document.body.style.overflow = next ? "hidden" : originalOverflow;
+      document.body.style.overflow =
+        next || document.querySelector(".sidebar.mobile-open")
+          ? "hidden"
+          : originalOverflow;
       overlays.forEach((o) => {
         const dialog = o.querySelector<HTMLElement>(".modal");
         if (!dialog) return;
