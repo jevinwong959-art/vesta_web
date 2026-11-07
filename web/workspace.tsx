@@ -29,14 +29,12 @@ export function PortalHome({
   return (
     <section className="portal-welcome">
       <div>
-        <small className="eyebrow">MADE FOR YOUR BUSINESS</small>
-        <h2>
-          {T("专属报价，放心交付。", "Your next order. Clearly connected.")}
-        </h2>
+        <small className="eyebrow">VESTA / SOURCING</small>
+        <h2>{T("采购，从一份清单开始。", "Your next order starts here.")}</h2>
         <p>
           {T(
-            "精选企业采购产品，透明的沟通与可追踪的交付。从一份清单开始，让每一次合作更简单。",
-            "Curated products for your business, with dedicated quotes and visible delivery milestones. Start with a request list.",
+            "挑选商品、填写数量与定制要求。专属销售跟进报价，你可以在这里查看每一笔订单的交付进度。",
+            "Choose products, quantities and customisation. Your contact prepares the quote. Follow each delivery from this workspace.",
           )}
         </p>
         <div className="portal-benefits">
@@ -44,6 +42,9 @@ export function PortalHome({
           <span>✓ {T("审批后正式报价", "Approved quotations")}</span>
           <span>✓ {T("订单全程可追踪", "Track every milestone")}</span>
         </div>
+        <a className="btn primary portal-start" href="#product-selection">
+          {T("浏览产品", "Browse products")} <span aria-hidden="true">↗</span>
+        </a>
       </div>
       <div className="portal-company">
         <small>

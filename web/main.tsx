@@ -1094,6 +1094,13 @@ function App() {
         {T("跳转到页面内容", "Skip to content")}
       </a>
       <ModalAccess />
+      {mobile && !portal && (
+        <button
+          className="navigation-shade"
+          aria-label={T("收起导航", "Dismiss navigation")}
+          onClick={() => setMobile(false)}
+        />
+      )}
       <aside className={mobile ? "sidebar mobile-open" : "sidebar"}>
         <a
           className="brand"
@@ -1579,7 +1586,11 @@ function App() {
           )}
           {page === "products" && portal && (
             <>
-              <div className="catalog-heading">
+              <div
+                className="catalog-heading"
+                id="product-selection"
+                tabIndex={-1}
+              >
                 <div>
                   <h2>{T("产品精选", "Explore our collection")}</h2>
                   <p className="muted">
