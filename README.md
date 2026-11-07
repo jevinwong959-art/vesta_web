@@ -1,0 +1,69 @@
+# Vesta Trade Workspace
+
+本地外贸 CRM＋客户门户 Demo，React / TypeScript / NestJS / PostgreSQL。虚构数据；仅监听本机，尚未批准公开上线。
+
+## 开始使用
+
+需要 Node.js 24 LTS、pnpm。已安装项目依赖后，在项目目录运行：
+
+```powershell
+pnpm install --frozen-lockfile
+pnpm build
+pnpm local
+```
+
+访问 **http://127.0.0.1:3100**。也可从 PowerShell 运行 `./启动Vesta.ps1`，脚本检查环境、安装缺失依赖、编译并启动。
+
+默认启动项目内便携 PostgreSQL，端口 55432，数据保存在 `.local/postgres`。不需要购买域名、服务器或安装 Docker。第一次安装包含 PostgreSQL 二进制下载，网络较慢时可用 `pnpm install --fetch-timeout=600000 --network-concurrency=4` 重试。
+
+开发模式 `pnpm dev`：前端 http://127.0.0.1:5173，API http://127.0.0.1:3100。前端热更新；修改后端后停止并重启开发命令。停止后数据库数据保留。已有数据库运行时不会重复启动或擅自停止该数据库。
+
+可选 Docker：`docker compose up -d postgres`，复制 `.env.example` 为 `.env`，将 `EXTERNAL_DATABASE=true` 后运行应用。Compose 同时提供可选 Mailpit / MinIO，但当前应用默认使用数据库邮件捕获、私有本地文件适配器；它们不是已接入的真实 SMTP/OSS 服务。
+
+## 演示账号
+
+所有初始账号密码：`VestaDemo2026!`。仅用于本地虚构 Demo，不适用于生产。`DEMO_PASSWORD` 只影响首次建库的种子账号，不改变已有密码。
+
+| 账号 | 角色 |
+|---|---|
+| owner | 经营负责人，可查看成本 |
+| manager | 销售经理，审批 |
+| sales / sales2 | 两位销售，各自客户范围 |
+| finance | 财务、回款、参考汇率 |
+| warehouse | 生产、仓储、发运 |
+| admin | 账号启停，停用即时撤销登录 |
+| buyer / buyer2 | 两家不同公司的客户门户 |
+
+登录页账号按钮只填写账号，实际必须通过后端密码认证，不是演示身份切换器。
+
+## 业务演示路线
+
+1. `buyer` 提交采购需求；退出后用 `sales` 创建报价。
+2. 销售选择商品、数量、价格、币种和条款后保存草稿、提交审批。
+3. `manager` 审批；高风险报价增加 `owner` 审批。提交人不能自批。
+4. `sales` 发布，`buyer` 接受，生成订单。
+5. `sales` 提交预付款线索，`finance` 核实。只有核实的收款改变订单已收。
+6. `warehouse` 释放生产，分批登记生产入库和发运，再登记各批签收。
+7. `finance` 核实尾款，全部签收且结清后订单完成。
+8. `owner` 查看审计；财务/经理/经营查看本地邮件捕获。CSV 先下载模板、预检，再确认新增。
+
+参考汇率每天北京时间 09:00 检查，服务启动会补查。Frankfurter 网络不可用时保留旧版本并展示错误。模拟汇率始终标明模拟；历史报价/订单不会被更新重算。服务关闭期间不运行任务。
+
+## 验证
+
+```powershell
+pnpm build
+pnpm test
+pnpm skill:install
+```
+
+集成测试创建独立 `vesta_test_<进程号>` 数据库和 3199 测试 API，测试后删除该测试库；不会清空实际 Demo 数据库。PDF 测试文件保存在忽略目录 `.local/test-uploads`。测试覆盖权限、审批、并发转单、回款、库存、汇率、CSV、私有文件和 API 重启。
+
+## 继续开发
+
+- 先阅读 `AGENTS.md`、`docs/项目计划.md`、`docs/项目进展.md`。
+- 执行 `pnpm skill:install` 将唯一续建 Skill 安装到个人 Codex 技能目录。
+- 在新会话调用 `$vesta-website-build`，先核对文档和实际 Git 差异再继续。
+- 项目计划描述完整目标；进展文档准确记录已实现及未完成事项。
+
+`.env`、数据库、上传附件、运行日志、构建产物和依赖均被 Git 忽略。GitHub 远端由用户指定；仓库当前公开，本项目不会自动改变可见性。
