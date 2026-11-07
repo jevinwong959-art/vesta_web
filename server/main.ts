@@ -122,14 +122,14 @@ class Api {
   ) {
     const u = await this.writeUser(req);
     if (name === "scan") {
-      allow(u, ["owner", "manager", "finance"]);
+      allow(u, ["owner", "manager"]);
       return scanReminders();
     }
     return action(u, name, body);
   }
   @Get("users") async users(@Req() req: Request) {
     const u = await authenticate(req.cookies.vesta_session);
-    allow(u, ["admin", "owner"]);
+    allow(u, ["owner"]);
     return (
       await pool.query(
         "SELECT id,username,name,role,customer,active FROM users ORDER BY username",
@@ -173,12 +173,12 @@ class Api {
   }
   @Post("users") async createUser(@Body() b: unknown, @Req() req: Request) {
     const u = await this.writeUser(req);
-    allow(u, ["admin"]);
+    allow(u, ["owner"]);
     const v = z
       .object({
         username: z.string().regex(/^[a-z][a-z0-9_-]{2,39}$/),
         name: z.string().min(1).max(80),
-        role: z.enum(["sales", "customer", "finance", "warehouse"]),
+        role: z.enum(["owner", "manager", "sales", "customer"]),
         customer: z.string().optional(),
         password: z.string().min(10).max(128),
       })
@@ -224,17 +224,18 @@ class Api {
   }
   @Get("customer-directory") async customerDirectory(@Req() req: Request) {
     const u = await authenticate(req.cookies.vesta_session);
-    allow(u, ["admin"]);
+    allow(u, ["owner"]);
     return read(async (db) =>
       (await db.all("customers")).map((c) => ({ id: c.id, name: c.name })),
     );
   }
   @Get("sales-directory") async salesDirectory(@Req() req: Request) {
     const u = await authenticate(req.cookies.vesta_session);
-    allow(u, ["owner", "manager"]);
+    allow(u, ["owner", "manager", "sales"]);
     return (
       await pool.query(
-        "SELECT id,name FROM users WHERE active=true AND role IN ('owner','manager','sales') ORDER BY name",
+        "SELECT id,name FROM users WHERE active=true AND role IN ('owner','manager','sales') AND ($1 <> 'sales' OR id=$2) ORDER BY name",
+        [u.role, u.id],
       )
     ).rows;
   }
@@ -307,7 +308,7 @@ class Api {
     @Req() req: Request,
   ) {
     const u = await this.writeUser(req);
-    allow(u, ["admin"]);
+    allow(u, ["owner"]);
     const active = z.boolean().parse(b.active);
     if (id === u.id) throw new BadRequestException("不能停用当前账号");
     return transaction(async (db) => {
@@ -376,7 +377,7 @@ class Api {
     @Res() res: Response,
   ) {
     const u = await authenticate(req.cookies.vesta_session);
-    allow(u, ["owner", "manager", "sales", "finance", "customer"]);
+    allow(u, ["owner", "manager", "sales", "customer"]);
     const c = await read((db) => db.get("contracts", id));
     if (
       !c ||
@@ -399,7 +400,7 @@ class Api {
     @Res() res: Response,
   ) {
     const u = await authenticate(req.cookies.vesta_session);
-    allow(u, ["owner", "manager", "sales", "finance"]);
+    allow(u, ["owner", "manager", "sales"]);
     if (!["customers", "products", "orders", "quotes"].includes(kind))
       throw new BadRequestException();
     const rows = await listData(u, kind);

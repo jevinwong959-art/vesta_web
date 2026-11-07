@@ -27,6 +27,14 @@ import {
   Menu,
 } from "lucide-react";
 import "./style.css";
+import "./prototype.css";
+import {
+  Customers,
+  Overview,
+  PortalHome,
+  Stats,
+  orderStage,
+} from "./workspace";
 
 type Row = { id: string; [key: string]: any };
 type User = {
@@ -72,6 +80,10 @@ const today = () => new Date().toISOString().slice(0, 10);
 const future = (n = 30) =>
   new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
 const statuses: Record<string, string> = {
+  cancelled: "已取消",
+  void: "已作废",
+  quoted: "已报价",
+  ordered: "已转订单",
   new: "待受理",
   draft: "草稿",
   pending: "待审批 / 核实",
@@ -85,20 +97,52 @@ const statuses: Record<string, string> = {
   signed: "已签署",
   captured: "本地已捕获",
 };
+const productKinds: Record<string, string> = {
+  "VT-TM500": "cup",
+  "VT-BP156": "bag",
+  "VT-NB-A5": "book",
+  "VT-UM03": "umbrella",
+  "VT-CB12": "tote",
+  "VT-GBOX": "box",
+};
+const pageDescriptions: Record<string, string> = {
+  dashboard: "订单、交付、回款与待办，掌握当前业务进展。",
+  customers: "一客一档，把每次沟通、历史订单和维护计划沉淀在一起。",
+  products: "共享产品资料、销售价与交期；成本仅对管理角色开放。",
+  inquiries:
+    "产品页发起的询价统一汇总于此。客户自行提交，内部人员可代客户登记，受理后创建报价。",
+  quotes: "草稿 → 提交审批 → 版本冻结 → 对客发布。正式报价始终有据可查。",
+  orders: "从预付款到生产、分批发货与签收，履约和资金状态独立记录。",
+  receipts: "到账线索、管理核实与订单核销分开记录，按原币追踪每一笔收款。",
+  inventory:
+    "库存 = 期初 + 入库 − 出库；经理登记生产、出库与调整申请，管理审批调整。",
+  contracts: "以订单归档合同与版本，授权查看和下载。",
+  notifications: "客户维护、报价审批、订单交付与尾款提醒；已读不等于完成跟进。",
+  rates: "每日参考汇率自动查询，保留来源、数据日期和版本；历史单据保持锁定。",
+  mails: "本地邮件捕获箱，查看提醒与账号邮件。不会向真实客户发送。",
+  audits: "追溯每次业务操作的时间、操作者和关联对象。",
+  settings: "管理、经理、销售、客户四类角色，各司其职，独立审批。",
+};
 const roles: Record<string, string> = {
-  owner: "经营负责人",
-  manager: "销售经理",
+  owner: "管理",
+  manager: "经理",
   sales: "销售人员",
-  finance: "财务人员",
-  warehouse: "生产 / 仓储",
-  admin: "系统管理员",
   customer: "客户门户",
+};
+const portalTitles: Record<string, [string, string]> = {
+  dashboard: ["客户中心", "Customer centre"],
+  products: ["产品目录", "Products"],
+  inquiries: ["我的询价", "My requests"],
+  quotes: ["我的报价", "My quotations"],
+  orders: ["我的订单", "My orders"],
+  contracts: ["我的合同", "My contracts"],
+  notifications: ["消息中心", "Notifications"],
 };
 const navigation = [
   ["dashboard", "经营总览", "Overview", LayoutDashboard],
   ["customers", "客户与跟进", "Customers", Users],
   ["products", "产品与价格", "Products", Package],
-  ["inquiries", "采购需求", "Requests", Mail],
+  ["inquiries", "询价申请", "Requests", Mail],
   ["quotes", "报价与审批", "Quotations", FileText],
   ["orders", "订单履约", "Orders", Truck],
   ["receipts", "回款管理", "Payments", Wallet],
@@ -120,6 +164,7 @@ function App() {
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false),
     [query, setQuery] = useState(""),
+    [statusFilter, setStatusFilter] = useState("all"),
     [form, setForm] = useState<Form | null>(null),
     [importKind, setImportKind] = useState<string | null>(null),
     [detail, setDetail] = useState<Row | null>(null),
@@ -128,8 +173,8 @@ function App() {
     T = (zh: string, english: string) => (en ? english : zh);
   const portal = user?.role === "customer",
     sales = ["owner", "manager", "sales"].includes(user?.role || ""),
-    finance = user?.role === "finance",
-    warehouse = user?.role === "warehouse";
+    finance = user?.role === "owner",
+    warehouse = user?.role === "manager";
   async function api(path: string, body?: any) {
     const r = await fetch("/api/v1/" + path, {
       method: body === undefined ? "GET" : "POST",
@@ -151,58 +196,44 @@ function App() {
   }
   async function load() {
     if (!user) return;
-    const kinds =
-      user.role === "admin"
-        ? ["settings", "mails"]
-        : portal
-          ? [
-              "customers",
-              "products",
-              "inquiries",
-              "quotes",
-              "orders",
-              "shipments",
-              "contracts",
-              "notifications",
-            ]
-          : warehouse
-            ? [
-                "customers",
-                "products",
-                "orders",
-                "shipments",
-                "contracts",
-                "ledger",
-                "adjustments",
-                "notifications",
-              ]
-            : [
-                "customers",
-                "products",
-                "inquiries",
-                "quotes",
-                "orders",
-                "receipts",
-                "shipments",
-                "contracts",
-                "follows",
-                "rates",
-                "ledger",
-                "adjustments",
-                "notifications",
-                ...(["owner", "manager", "finance"].includes(user.role)
-                  ? ["settings", "mails"]
-                  : []),
-                ...(user.role === "owner" ? ["audits"] : []),
-              ];
+    const kinds = portal
+      ? [
+          "customers",
+          "products",
+          "inquiries",
+          "quotes",
+          "orders",
+          "shipments",
+          "contracts",
+          "notifications",
+        ]
+      : [
+          "customers",
+          "products",
+          "inquiries",
+          "quotes",
+          "orders",
+          "receipts",
+          "shipments",
+          "contracts",
+          "follows",
+          "rates",
+          "ledger",
+          "adjustments",
+          "notifications",
+          ...(["owner", "manager"].includes(user.role)
+            ? ["settings", "mails"]
+            : []),
+          ...(user.role === "owner" ? ["audits"] : []),
+        ];
     const result = await Promise.all(
       kinds.map(async (k) => [k, await api("data/" + k)]),
     );
     const next = Object.fromEntries(result);
-    if (["admin", "owner"].includes(user.role)) next.users = await api("users");
-    if (user.role === "admin")
+    if (["owner"].includes(user.role)) next.users = await api("users");
+    if (user.role === "owner")
       next.customerDirectory = await api("customer-directory");
-    if (["owner", "manager"].includes(user.role))
+    if (["owner", "manager", "sales"].includes(user.role))
       next.salesDirectory = await api("sales-directory");
     setData(next);
   }
@@ -275,6 +306,23 @@ function App() {
         { key: "name", label: "公司名称", value: c?.name },
         { key: "en", label: "Company name (English)", value: c?.en },
         { key: "country", label: "国家 / Region", value: c?.country },
+        {
+          key: "industry",
+          label: "行业",
+          value: c?.industry || "",
+          required: false,
+        },
+        {
+          key: "tier",
+          label: "客户分级",
+          value: c?.tier || "B",
+          options: [
+            { value: "A", label: "A · 重点客户" },
+            { value: "B", label: "B · 成长客户" },
+            { value: "C", label: "C · 普通客户" },
+          ],
+        },
+        { key: "phone", label: "电话", value: c?.phone || "", required: false },
         { key: "contact", label: "联系人 / Contact", value: c?.contact },
         { key: "email", label: "Email", type: "email", value: c?.email },
         { key: "address", label: "地址 / Address", value: c?.address },
@@ -336,7 +384,7 @@ function App() {
   }
   function inquiry(p?: Row) {
     openForm(
-      T("提交采购需求", "Submit purchase request"),
+      T("提交询价申请", "Submit purchase request"),
       [
         ...(!portal
           ? [{ key: "customer", label: "客户", options: customerOptions }]
@@ -539,60 +587,221 @@ function App() {
       { id: o.id, key: crypto.randomUUID() },
     );
   }
-  function follow(c: Row) {
-    openForm(
-      "记录跟进 / Follow up",
-      [
-        { key: "note", label: "跟进内容 / Note", type: "textarea" },
+  function follow(c: Row, kind = "customers") {
+    const isCustomer = kind === "customers";
+    const customerId = isCustomer ? c.id : c.customer;
+    const hasOrder = rows("orders").some(
+      (o) => o.customer === customerId && o.status !== "cancelled",
+    );
+    const rules = rows("settings").find((r) => r.id === "rules");
+    const now = new Date();
+    const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 16);
+    setDetail(null);
+    setForm({
+      title: isCustomer ? "记录客户维护" : "记录单据跟进",
+      fields: [
+        {
+          key: "channel",
+          label: "沟通方式",
+          options: [
+            "电话",
+            "邮件",
+            "即时消息",
+            "拜访",
+            "视频会议",
+            ...(!isCustomer ? ["内部进度"] : []),
+          ].map((v) => ({ value: v, label: v })),
+        },
+        {
+          key: "occurred",
+          label: "实际发生时间",
+          type: "datetime-local",
+          value: local,
+        },
+        {
+          key: "note",
+          label: "沟通摘要与下一步动作（至少5字）",
+          type: "textarea",
+        },
         {
           key: "next",
-          label: "下次跟进 / Next follow-up",
+          label: "下次计划跟进",
           type: "date",
-          value: future(7),
+          value: future(
+            isCustomer
+              ? hasOrder
+                ? rules?.customerActive || 30
+                : rules?.customerProspect || 7
+              : 3,
+          ),
         },
+        ...(!isCustomer
+          ? [
+              {
+                key: "syncCustomer",
+                label: "同步为客户维护（确实与客户沟通时选择）",
+                options: [
+                  { value: "no", label: "不同步，独立记录单据进度" },
+                  { value: "yes", label: "同步，确实与客户进行了沟通" },
+                ],
+              },
+            ]
+          : []),
       ],
-      "follow-create",
-      { customer: c.id },
-    );
+      submit: (v) =>
+        run("follow-create", {
+          ...v,
+          customer: customerId,
+          kind,
+          entity: c.id,
+          occurred: new Date(v.occurred).toISOString(),
+          syncCustomer: v.syncCustomer === "yes",
+        }),
+    });
   }
   const allowed = (id: string) =>
-    user?.role === "admin"
-      ? ["settings", "mails"].includes(id)
-      : portal
-        ? [
-            "dashboard",
-            "products",
-            "inquiries",
-            "quotes",
-            "orders",
-            "contracts",
-            "notifications",
-          ].includes(id)
-        : warehouse
-          ? [
-              "dashboard",
-              "products",
-              "orders",
-              "inventory",
-              "notifications",
-            ].includes(id)
-          : id === "audits"
-            ? user?.role === "owner"
-            : id === "mails"
-              ? ["owner", "manager", "finance"].includes(user?.role || "")
-              : id === "settings"
-                ? ["owner", "manager", "finance"].includes(user?.role || "")
-                : true;
+    portal
+      ? [
+          "dashboard",
+          "products",
+          "inquiries",
+          "quotes",
+          "orders",
+          "contracts",
+          "notifications",
+        ].includes(id)
+      : id === "audits"
+        ? user?.role === "owner"
+        : id === "mails"
+          ? ["owner", "manager"].includes(user?.role || "")
+          : id === "settings"
+            ? ["owner", "manager"].includes(user?.role || "")
+            : true;
   const go = (id: string) => {
+    window.scrollTo({ top: 0 });
     setPage(id);
     setQuery("");
+    setStatusFilter("all");
     setDetail(null);
     setMobile(false);
   };
   const filtered = (kind: string) =>
-    rows(kind).filter((r) =>
-      JSON.stringify(r).toLowerCase().includes(query.toLowerCase()),
+    rows(kind).filter(
+      (r) =>
+        (JSON.stringify(r) + " " + customer(r.customer))
+          .toLowerCase()
+          .includes(query.toLowerCase()) &&
+        (statusFilter === "all" ||
+          (kind === "products"
+            ? r.category === statusFilter
+            : r.status === statusFilter)),
     );
+  const count = (kind: string, status: string) =>
+    rows(kind).filter((r) => r.status === status).length;
+  const sum = (kind: string, key: string) =>
+    rows(kind).reduce((n, r) => n + Number(r[key] || 0), 0);
+  const metric = (label: string, value: any, hint: string) => ({
+    label,
+    value,
+    hint,
+  });
+  const summaries: Record<string, any[]> = {
+    inquiries: [
+      metric(
+        "全部询价",
+        rows("inquiries").length,
+        "产品快捷入口与本页统一汇总",
+      ),
+      metric("待受理", count("inquiries", "new"), "等待业务人员创建报价"),
+      metric(
+        "已报价 / 转订单",
+        count("inquiries", "quoted") + count("inquiries", "ordered"),
+        "按关联业务自动更新",
+      ),
+    ],
+    quotes: [
+      metric("报价版本", rows("quotes").length, "保留历史版本与冻结快照"),
+      metric("待审批", count("quotes", "pending"), "由独立审批人处理"),
+      metric(
+        "已对客发布",
+        rows("quotes").filter((q) => q.published && q.status === "approved")
+          .length,
+        "等待客户确认",
+      ),
+    ],
+    orders: [
+      metric("履约中", count("orders", "confirmed"), "交付与资金分别追踪"),
+      metric(
+        "待生产释放",
+        rows("orders").filter((o) => o.status === "confirmed" && !o.released)
+          .length,
+        "先核实预付款，再安排生产",
+      ),
+      metric("已完成", count("orders", "completed"), "全部签收且应收结清"),
+    ],
+    inventory: [
+      metric("库存商品", rows("products").length, "单仓成品库存 SKU"),
+      metric(
+        "实物 / 预留",
+        sum("products", "stock") + " / " + sum("products", "reserved"),
+        "单位：件；预留属于实物库存",
+      ),
+      metric(
+        "可用数量",
+        sum("products", "stock") - sum("products", "reserved"),
+        "实物减预留；单位：件",
+      ),
+    ],
+    contracts: [
+      metric("合同版本", rows("contracts").length, "按订单归档、保留版本"),
+      metric("已签署", count("contracts", "signed"), "人工登记的签署状态"),
+      metric(
+        "关联订单",
+        new Set(rows("contracts").map((c) => c.order)).size,
+        "附件按客户权限授权下载",
+      ),
+    ],
+    receipts: [
+      ...["CNY", "USD"].map((cur) =>
+        metric(
+          cur + " · 待收余额",
+          money(
+            rows("orders")
+              .filter((o) => o.currency === cur && o.status !== "cancelled")
+              .reduce((s, o) => s + o.total - o.paid, 0),
+            cur,
+          ),
+          "非取消订单，按原币统计",
+        ),
+      ),
+      metric(
+        "待核实线索",
+        count("receipts", "pending"),
+        "由管理核实到账后核销",
+      ),
+    ],
+    notifications: [
+      metric(
+        "待处理",
+        rows("notifications").filter((n) => !n.resolved).length,
+        "业务处理后自动解除",
+      ),
+      metric(
+        "未读",
+        rows("notifications").filter((n) => !n.read && !n.resolved).length,
+        "已读不会重置业务时间",
+      ),
+      metric(
+        "已升级",
+        rows("notifications").filter(
+          (n) => n.level === "escalation" && !n.resolved,
+        ).length,
+        "逾期提醒升级至管理",
+      ),
+    ],
+  };
   const title = navigation.find((n) => n[0] === page);
   if (!ready) return <div className="loading">VESTA · Loading workspace…</div>;
   if (!user)
@@ -602,7 +811,7 @@ function App() {
           setError("");
           try {
             setUser(await api("login", v));
-            setPage(v.username === "admin" ? "settings" : "dashboard");
+            setPage("dashboard");
           } catch (e) {
             setError((e as Error).message);
           }
@@ -658,7 +867,7 @@ function App() {
       )}
     </div>
   );
-  const showMoney = !["warehouse", "admin"].includes(user.role);
+  const showMoney = true;
   return (
     <div className="workspace">
       <aside className={mobile ? "sidebar mobile-open" : "sidebar"}>
@@ -688,7 +897,7 @@ function App() {
                 onClick={() => go(id)}
               >
                 <Icon size={18} />
-                <span>{T(zh, eng)}</span>
+                <span>{portal ? T(...portalTitles[id]) : T(zh, eng)}</span>
                 {id === "notifications" &&
                   rows("notifications").some((n) => !n.read) && <i />}
               </button>
@@ -734,7 +943,11 @@ function App() {
             </button>
             <span>{portal ? "Customer portal" : "Workspace"}</span>
             <ChevronRight size={14} />
-            <strong>{T(title?.[1] || "", title?.[2] || "")}</strong>
+            <strong>
+              {portal
+                ? T(...portalTitles[page])
+                : T(title?.[1] || "", title?.[2] || "")}
+            </strong>
           </div>
           <div className="top-actions">
             <span className="connection">
@@ -763,17 +976,24 @@ function App() {
               <div className="eyebrow">
                 VESTA / {portal ? "CUSTOMER EXPERIENCE" : "SALES OPERATIONS"}
               </div>
-              <h1>{T(title?.[1] || "", title?.[2] || "")}</h1>
+              <h1>
+                {portal
+                  ? T(...portalTitles[page])
+                  : T(title?.[1] || "", title?.[2] || "")}
+              </h1>
               <p>
                 {T(
-                  "从每一次询价，到每一份如期交付。",
+                  (portal
+                    ? "浏览产品、提交询价、确认报价，跟踪您公司的订单与交付。"
+                    : pageDescriptions[page]) ||
+                    "从每一次询价，到每一份如期交付。",
                   "From the first inquiry to every delivery on time.",
                 )}
               </p>
             </div>
             <div className="heading-actions">
               {page === "settings" &&
-                user.role === "admin" &&
+                user.role === "owner" &&
                 btn(
                   "+ 创建账号",
                   () =>
@@ -788,8 +1008,8 @@ function App() {
                           options: [
                             { value: "sales", label: "销售" },
                             { value: "customer", label: "客户门户" },
-                            { value: "finance", label: "财务" },
-                            { value: "warehouse", label: "仓储" },
+                            { value: "owner", label: "管理" },
+                            { value: "manager", label: "经理" },
                           ],
                         },
                         {
@@ -861,7 +1081,7 @@ function App() {
                 btn("+ 新增产品", () => createProduct(), true)}
               {page === "inquiries" &&
                 (sales || portal) &&
-                btn(T("+ 采购需求", "+ New request"), () => inquiry(), true)}
+                btn(T("+ 新建询价", "+ New request"), () => inquiry(), true)}
               {page === "quotes" &&
                 sales &&
                 btn("+ 新建报价", () => quote(), true)}
@@ -887,251 +1107,140 @@ function App() {
               {notice}
             </div>
           )}
-          {page === "dashboard" && (
-            <>
-              <section className="welcome">
-                <div>
-                  <span className="eyebrow">
-                    A CLEARER VIEW OF YOUR BUSINESS
-                  </span>
-                  <h2>
-                    {T(
-                      "让每一笔业务，有迹可循。",
-                      "Every order. A clear way forward.",
-                    )}
-                  </h2>
-                  <p>
-                    {T(
-                      "报价、交付与回款，汇聚在同一个工作空间。",
-                      "Quotations, deliveries and payments in one workspace.",
-                    )}
-                  </p>
-                  <button
-                    className="welcome-link"
-                    onClick={() => go(portal ? "products" : "quotes")}
-                  >
-                    {T(
-                      portal ? "浏览产品目录" : "进入报价工作台",
-                      portal
-                        ? "Explore the catalogue"
-                        : "Open quotation workspace",
-                    )}{" "}
-                    <ArrowUpRight size={18} />
-                  </button>
+          {page === "dashboard" && portal && (
+            <PortalHome data={data} en={en} onGo={go} />
+          )}
+          {page === "dashboard" && !portal && (
+            <Overview
+              data={data}
+              en={en}
+              onGo={go}
+              onOrder={(o) => {
+                go("orders");
+                setDetail(o);
+              }}
+            />
+          )}
+          {summaries[page] && !portal && <Stats items={summaries[page]} />}
+          {page !== "dashboard" &&
+            page !== "customers" &&
+            page !== "settings" && (
+              <div className="toolbar">
+                <div className="search">
+                  <Search size={16} />
+                  <input
+                    aria-label="搜索"
+                    placeholder={T("搜索当前记录…", "Search records…")}
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                  />
                 </div>
-                <div className="orbit">
-                  <div>
-                    V
-                    <span>
-                      GLOBAL TRADE
-                      <br />
-                      LOCAL CONNECTIONS
-                    </span>
-                  </div>
-                </div>
-              </section>
-              <div className="metrics">
-                {[
-                  [
-                    T("客户档案", "Customers"),
-                    rows("customers").length,
-                    "customers",
-                    Users,
-                  ],
-                  [
-                    T("进行中报价", "Open quotations"),
-                    rows("quotes").filter((q) =>
-                      ["draft", "pending", "approved"].includes(q.status),
-                    ).length,
-                    "quotes",
-                    FileText,
-                  ],
-                  [
-                    T("履约中订单", "Active orders"),
-                    rows("orders").filter((o) => o.status === "confirmed")
-                      .length,
-                    "orders",
-                    Truck,
-                  ],
-                  [
-                    T("未读提醒", "Unread notices"),
-                    rows("notifications").filter((n) => !n.read).length,
-                    "notifications",
-                    Bell,
-                  ],
-                ].map(([label, n, id, Icon]: any) => (
-                  <button key={id} className="metric" onClick={() => go(id)}>
-                    <span className="metric-icon">
-                      <Icon size={21} />
-                    </span>
-                    <span className="metric-label">{label}</span>
-                    <strong>
-                      {n}
-                      <small>{T("条", "records")}</small>
-                    </strong>
-                    <span className="metric-hint">
-                      {T("查看业务明细", "View details")}{" "}
-                      <ArrowUpRight size={14} />
-                    </span>
-                  </button>
-                ))}
-              </div>
-              <div className="dashboard-grid">
-                <section className="card">
-                  <div className="card-head">
-                    <div>
-                      <h3>{T("最新订单", "Recent orders")}</h3>
-                      <small>
-                        {T(
-                          "交付进度与资金状态分别记录",
-                          "Delivery and payment tracked independently",
-                        )}
-                      </small>
-                    </div>
-                    <button className="link" onClick={() => go("orders")}>
-                      {T("全部订单", "View all")} →
-                    </button>
-                  </div>
-                  {table(
-                    [
-                      T("订单 / 客户", "Order / Customer"),
-                      T("状态", "Status"),
-                      showMoney
-                        ? T("订单金额", "Amount")
-                        : T("交期", "Delivery"),
-                    ],
-                    rows("orders")
-                      .slice(-5)
-                      .reverse()
-                      .map((o) => [
-                        <button
-                          className="link"
-                          onClick={() => {
-                            go("orders");
-                            setDetail(o);
-                          }}
-                        >
-                          {o.id}
-                          <small className="sub">{customer(o.customer)}</small>
-                        </button>,
-                        badge(o.status),
-                        showMoney ? money(o.total, o.currency) : o.eta,
-                      ]),
-                  )}
-                </section>
-                <section className="card">
-                  <div className="card-head">
-                    <h3>{T("工作提示", "Workspace notes")}</h3>
-                    <Clock size={18} />
-                  </div>
-                  <div className="tips">
-                    <div>
-                      <span className="tip-index">01</span>
-                      <h4>
-                        {T("每个账号，独立权限", "Every account has its scope")}
-                      </h4>
-                      <p>
-                        {T(
-                          "真实后端校验，客户仅查看所属公司的记录。",
-                          "Customer records are protected by server-side authorization.",
-                        )}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="tip-index">02</span>
-                      <h4>
-                        {T(
-                          "历史报价，保持原样",
-                          "Historical quotations stay intact",
-                        )}
-                      </h4>
-                      <p>
-                        {T(
-                          "自动参考汇率不会改写已冻结的报价与订单。",
-                          "Exchange rate updates never rewrite frozen quotations.",
-                        )}
-                      </p>
-                    </div>
-                    <div className="notice-box">
-                      {T(
-                        "这是本地 Demo。关闭后端后，后台任务会暂停；重新启动时补查。",
-                        "Local Demo: background jobs pause when the server stops and catch up on restart.",
-                      )}
-                    </div>
-                  </div>
-                </section>
-              </div>
-              {showMoney && (
-                <div className="currency-summary">
-                  {["USD", "CNY"].map((c) => (
-                    <div key={c}>
-                      <small>
-                        {c} ·{" "}
-                        {T("已确认订单 / 待回款", "Confirmed / Outstanding")}
-                      </small>
-                      <strong>
-                        {money(
-                          rows("orders")
-                            .filter((o) => o.currency === c)
-                            .reduce((s, o) => s + o.total, 0),
-                          c,
-                        )}{" "}
-                        <span>
-                          /{" "}
-                          {money(
-                            rows("orders")
-                              .filter((o) => o.currency === c)
-                              .reduce((s, o) => s + o.total - o.paid, 0),
-                            c,
-                          )}
-                        </span>
-                      </strong>
-                    </div>
+                <select
+                  aria-label="记录筛选"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                >
+                  <option value="all">
+                    {T("全部状态 / 分类", "All states / categories")}
+                  </option>
+                  {Array.from(
+                    new Set(
+                      rows(page === "inventory" ? "products" : page)
+                        .map((r) =>
+                          page === "products" ? r.category : r.status,
+                        )
+                        .filter(Boolean),
+                    ),
+                  ).map((v) => (
+                    <option key={v} value={v}>
+                      {statuses[v] || v}
+                    </option>
                   ))}
-                </div>
-              )}
-            </>
-          )}
-          {page !== "dashboard" && (
-            <div className="toolbar">
-              <div className="search">
-                <Search size={16} />
-                <input
-                  aria-label="搜索"
-                  placeholder={T("搜索当前记录…", "Search records…")}
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
+                </select>
+                <span className="muted">
+                  {filtered(page === "inventory" ? "products" : page).length}{" "}
+                  {T("条记录 · 当前授权范围", "records in scope")}
+                </span>
+                {["customers", "products", "quotes", "orders"].includes(page) &&
+                  showMoney &&
+                  !portal && (
+                    <a className="btn" href={"/api/v1/export/" + page}>
+                      <Download size={15} />
+                      CSV
+                    </a>
+                  )}
+                {((page === "customers" && sales) ||
+                  (page === "products" &&
+                    ["owner", "manager"].includes(user.role))) && (
+                  <button className="btn" onClick={() => setImportKind(page)}>
+                    导入 CSV
+                  </button>
+                )}
               </div>
-              <span className="muted">
-                {T(
-                  "数据以当前账号权限为准",
-                  "Records reflect your access permissions",
-                )}
-              </span>
-              {["customers", "products", "quotes", "orders"].includes(page) &&
-                showMoney &&
-                !portal && (
-                  <a className="btn" href={"/api/v1/export/" + page}>
-                    <Download size={15} />
-                    CSV
-                  </a>
-                )}
-              {((page === "customers" && sales) ||
-                (page === "products" &&
-                  ["owner", "manager"].includes(user.role))) && (
-                <button className="btn" onClick={() => setImportKind(page)}>
-                  导入 CSV
-                </button>
+            )}
+          {page === "products" && !portal && (
+            <section className="card">
+              {table(
+                [
+                  "产品 / 规格",
+                  "分类",
+                  "标准售价",
+                  "起订量 / 交期",
+                  "可用库存",
+                  ...(user.role === "owner" ? ["成本（受限）"] : []),
+                  "操作",
+                ],
+                filtered("products").map((p) => [
+                  <div className="crm-identity">
+                    <span className="product-mini">
+                      <img
+                        src={
+                          "/products/" + (productKinds[p.sku] || "box") + ".svg"
+                        }
+                        alt=""
+                      />
+                    </span>
+                    <div>
+                      <strong>{p.name}</strong>
+                      <small className="sub">
+                        {p.sku} · {p.en}
+                      </small>
+                    </div>
+                  </div>,
+                  p.category,
+                  <>
+                    {money(p.price)}
+                    <small className="sub">{money(p.usd, "USD")}</small>
+                  </>,
+                  <>
+                    {p.moq} 件<small className="sub">{p.lead} 天</small>
+                  </>,
+                  p.stock - p.reserved,
+                  ...(user.role === "owner"
+                    ? [p.cost == null ? "待核价" : money(p.cost)]
+                    : []),
+                  <div className="actions">
+                    <button className="btn soft" onClick={() => inquiry(p)}>
+                      发起询价
+                    </button>
+                    {["owner", "manager"].includes(user.role) &&
+                      btn("编辑", () => createProduct(p))}
+                  </div>,
+                ]),
               )}
-            </div>
+            </section>
           )}
-          {page === "products" && (
+          {page === "products" && portal && (
             <div className="product-grid">
               {filtered("products").map((p, i) => (
                 <article className="product-card" key={p.id}>
                   <div className={"product-art art-" + (i % 6)}>
-                    <Package size={64} strokeWidth={1} />
+                    <img
+                      src={
+                        "/products/" + (productKinds[p.sku] || "box") + ".svg"
+                      }
+                      alt={(en ? p.en : p.name) + " 示意图"}
+                    />
                     <span>{p.sku}</span>
                   </div>
                   <div className="product-info">
@@ -1175,57 +1284,27 @@ function App() {
             </div>
           )}
           {page === "customers" && (
-            <section className="card">
-              {table(
-                ["客户 / 公司", "地区 / 联系人", "负责人", "币种", "操作"],
-                filtered("customers").map((c) => [
-                  <>
-                    <strong>{c.name}</strong>
-                    <small className="sub">{c.en}</small>
-                  </>,
-                  <>
-                    {c.country}
-                    <small className="sub">
-                      {c.contact} · {c.email}
-                    </small>
-                  </>,
-                  c.owner,
-                  c.currency,
-                  <div className="actions">
-                    {sales && btn("跟进", () => follow(c))}
-                    {sales && btn("编辑", () => createCustomer(c))}
-                  </div>,
-                ]),
-              )}
-            </section>
-          )}
-          {page === "customers" && sales && (
-            <section className="card section-gap">
-              <div className="card-head">
-                <h3>跟进历史</h3>
-              </div>
-              {table(
-                ["客户", "内容", "下次跟进", "记录时间"],
-                rows("follows")
-                  .slice()
-                  .reverse()
-                  .map((f) => [
-                    customer(f.customer),
-                    f.note,
-                    f.next,
-                    new Date(f.at).toLocaleString(),
-                  ]),
-              )}
-            </section>
+            <Customers
+              data={data}
+              user={user}
+              onFollow={follow}
+              onEdit={createCustomer}
+              onImport={() => setImportKind("customers")}
+              onOrder={(o) => {
+                go("orders");
+                setDetail(o);
+              }}
+            />
           )}
           {page === "inquiries" && (
             <section className="card">
               {table(
                 [
-                  T("需求编号", "Request"),
+                  T("申请编号", "Request"),
                   T("客户", "Customer"),
                   T("商品 / 数量", "Product / Quantity"),
                   T("交期", "Delivery"),
+                  T("状态", "Status"),
                   T("操作", "Action"),
                 ],
                 filtered("inquiries").map((i) => [
@@ -1237,8 +1316,14 @@ function App() {
                     <small className="sub">{i.note}</small>
                   </>,
                   i.eta,
+                  badge(i.status),
                   sales
-                    ? btn("创建报价", () => quote(undefined, i))
+                    ? i.status === "new"
+                      ? btn("创建报价", () => quote(undefined, i))
+                      : btn("查看关联报价", () => {
+                          go("quotes");
+                          setQuery(i.id);
+                        })
                     : badge(i.status),
                 ]),
               )}
@@ -1292,7 +1377,7 @@ function App() {
                     </strong>,
                     customer(o.customer),
                     <>
-                      {badge(o.status)}
+                      <span className="badge approved">{orderStage(o)}</span>
                       <small className="sub">
                         {o.items.reduce(
                           (s: number, i: any) => s + i.shipped,
@@ -1301,6 +1386,26 @@ function App() {
                         / {o.items.reduce((s: number, i: any) => s + i.qty, 0)}{" "}
                         {T("已发货", "shipped")}
                       </small>
+                      <div className="crm-progress">
+                        <i
+                          style={{
+                            width: `${
+                              (o.items.reduce(
+                                (s: number, i: any) => s + i.shipped,
+                                0,
+                              ) /
+                                Math.max(
+                                  1,
+                                  o.items.reduce(
+                                    (s: number, i: any) => s + i.qty,
+                                    0,
+                                  ),
+                                )) *
+                              100
+                            }%`,
+                          }}
+                        />
+                      </div>
                     </>,
                     ...(showMoney
                       ? [
@@ -1447,7 +1552,7 @@ function App() {
                       r.date,
                       new Date(r.fetchedAt).toLocaleString(),
                       finance
-                        ? btn("财务确认采用", () =>
+                        ? btn("管理确认采用", () =>
                             openForm(
                               "确认旧参考值",
                               [{ key: "reason", label: "确认原因" }],
@@ -1463,7 +1568,7 @@ function App() {
                 <div className="section-gap">
                   {btn("录入人工汇率", () =>
                     openForm(
-                      "财务人工汇率",
+                      "人工汇率（管理）",
                       [
                         { key: "rate", label: "1 USD = ? CNY", type: "number" },
                         {
@@ -1541,7 +1646,7 @@ function App() {
                   "Reminders run on the server. Reading does not reset follow-up dates.",
                 )}
               </div>
-              {["owner", "manager", "finance"].includes(user.role) && (
+              {["owner", "manager"].includes(user.role) && (
                 <div className="section-gap">
                   {btn("立即扫描", () => perform("scan", {}))}
                 </div>
@@ -1604,10 +1709,37 @@ function App() {
           )}
           {page === "settings" && (
             <>
-              <div className="notice-box">
-                真实登录与服务端权限已启用。本地演示账号使用虚构身份；正式上线前必须完成账户与安全验收。
-              </div>
-              {["admin", "owner"].includes(user.role) && (
+              <section className="card">
+                <div className="card-head">
+                  <h3>四类角色与职责</h3>
+                </div>
+                {table(
+                  ["角色", "主要职责", "数据与限制"],
+                  [
+                    [
+                      "管理",
+                      "成本、风险审批、回款核实/冲正、汇率、账号",
+                      "全量业务；禁止自批",
+                    ],
+                    [
+                      "经理",
+                      "团队客户、报价审批、生产、发货、签收",
+                      "全量业务，无成本；不能核实回款",
+                    ],
+                    [
+                      "销售",
+                      "客户维护、询价、报价、订单与回款线索",
+                      "仅本人客户；不能审批、核款或扣减库存",
+                    ],
+                    [
+                      "客户",
+                      "询价、确认报价、查询订单和合同",
+                      "仅所属公司；无内部备注和成本",
+                    ],
+                  ],
+                )}
+              </section>
+              {["owner"].includes(user.role) && (
                 <section className="card section-gap">
                   {table(
                     ["账号", "姓名", "角色", "状态", "操作"],
@@ -1616,7 +1748,7 @@ function App() {
                       u.name,
                       roles[u.role],
                       u.active ? "启用" : "停用",
-                      user.role === "admin" && u.id !== user.id
+                      user.role === "owner" && u.id !== user.id
                         ? btn(u.active ? "停用并撤销登录" : "启用", () => {
                             void api("users/" + u.id + "/active", {
                               active: !u.active,
@@ -1885,27 +2017,7 @@ function App() {
               {page === "orders" &&
                 (sales || finance) &&
                 btn("登记回款", () => receipt(detail), true)}
-              {sales &&
-                btn("记录跟进", () =>
-                  openForm(
-                    "单据跟进",
-                    [
-                      { key: "note", label: "跟进内容", type: "textarea" },
-                      {
-                        key: "next",
-                        label: "下次跟进",
-                        type: "date",
-                        value: future(3),
-                      },
-                    ],
-                    "follow-create",
-                    {
-                      customer: detail.customer,
-                      kind: page,
-                      entity: detail.id,
-                    },
-                  ),
-                )}
+              {sales && btn("记录跟进", () => follow(detail, page))}
               {page === "quotes" &&
                 sales &&
                 detail.status !== "accepted" &&
@@ -2094,13 +2206,10 @@ function Login({
             <small>本地演示账号 · 密码 VestaDemo2026!</small>
             <div>
               {[
-                ["owner", "经营"],
+                ["owner", "管理"],
                 ["manager", "经理"],
                 ["sales", "销售"],
-                ["finance", "财务"],
-                ["warehouse", "仓储"],
                 ["buyer", "客户"],
-                ["admin", "管理"],
               ].map(([id, name]) => (
                 <button
                   key={id}
@@ -2502,7 +2611,7 @@ function ImportModal({
         <div className="modal-body">
           <div className="notice-box">
             先下载模板填入虚构数据，再预检。每批最多 500
-            行，仅新增；已存在的编号不会被覆盖。产品成本需经营负责人在导入后单独核定。
+            行，仅新增；已存在的编号不会被覆盖。产品成本需管理人员在导入后单独核定。
           </div>
           <div className="upload-form">
             <a className="btn" href={"/api/v1/templates/" + kind}>

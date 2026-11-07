@@ -2,18 +2,23 @@ import { pool, transaction } from "./db";
 import { hashPassword } from "./auth";
 export async function seed() {
   await transaction(async (db) => {
+    const migrated = await db.client.query(
+      "UPDATE users SET role=CASE WHEN role IN ('finance','admin') THEN 'owner' ELSE 'manager' END WHERE role IN ('finance','admin','warehouse') RETURNING id,role",
+    );
+    for (const u of migrated.rows)
+      await db.audit("system", "four-role-migration:" + u.role, u.id);
     if ((await db.client.query("SELECT 1 FROM users LIMIT 1")).rowCount) return;
     const password = hashPassword(
       process.env.DEMO_PASSWORD || "VestaDemo2026!",
     );
     for (const [id, name, role, customer] of [
-      ["owner", "经营负责人", "owner", null],
-      ["manager", "销售经理", "manager", null],
+      ["owner", "管理", "owner", null],
+      ["manager", "经理", "manager", null],
       ["sales", "林悦", "sales", null],
       ["sales2", "陈默", "sales", null],
-      ["finance", "财务", "finance", null],
-      ["warehouse", "生产 / 仓储", "warehouse", null],
-      ["admin", "系统管理员", "admin", null],
+      ["finance", "管理（原财务）", "owner", null],
+      ["warehouse", "经理（原仓储）", "manager", null],
+      ["admin", "管理（原系统管理员）", "owner", null],
       ["buyer", "Hailan Buyer", "customer", "C-001"],
       ["buyer2", "Northstar Buyer", "customer", "C-002"],
     ])

@@ -34,7 +34,7 @@ async function required(db: Store, kind: string, id: string) {
 }
 export async function canCustomer(db: Store, u: User, id: string) {
   const c = await db.get("customers", id);
-  if (!c || u.role === "admin") return false;
+  if (!c) return false;
   return u.role === "customer"
     ? u.customer === id
     : u.role === "sales"
@@ -53,27 +53,6 @@ export function sanitize(value: any, u: User): any {
   for (const [k, v] of Object.entries(value)) {
     if (["password", "content", "token"].includes(k)) continue;
     if (["cost", "margin", "costSnapshot"].includes(k) && u.role !== "owner")
-      continue;
-    if (
-      ["warehouse", "admin"].includes(u.role) &&
-      [
-        "price",
-        "usd",
-        "total",
-        "amount",
-        "paid",
-        "balance",
-        "depositPct",
-        "freight",
-        "discount",
-        "fees",
-        "unitPrice",
-        "listPrice",
-        "rate",
-        "fx",
-        "itemsTotal",
-      ].includes(k)
-    )
       continue;
     if (
       u.role === "customer" &&
@@ -113,9 +92,6 @@ export async function listData(u: User, kind: string) {
   ];
   if (!supported.includes(kind)) throw new NotFoundException();
   return read(async (db) => {
-    if (u.role === "admin") {
-      if (!["settings", "mails"].includes(kind)) throw new ForbiddenException();
-    }
     if (
       u.role === "customer" &&
       ![
@@ -130,17 +106,10 @@ export async function listData(u: User, kind: string) {
       ].includes(kind)
     )
       throw new ForbiddenException();
-    if (
-      u.role === "warehouse" &&
-      ["quotes", "receipts", "rates", "audits", "mails", "inquiries"].includes(
-        kind,
-      )
-    )
-      throw new ForbiddenException();
     if (kind === "audits") allow(u, ["owner"]);
-    if (kind === "mails") allow(u, ["admin", "owner", "finance", "manager"]);
-    if (kind === "rates") allow(u, ["owner", "manager", "sales", "finance"]);
-    if (kind === "settings") allow(u, ["owner", "manager", "finance", "admin"]);
+    if (kind === "mails") allow(u, ["owner", "manager"]);
+    if (kind === "rates") allow(u, ["owner", "manager", "sales"]);
+    if (kind === "settings") allow(u, ["owner", "manager"]);
     let rows = await db.all(kind);
     if (kind === "rates")
       rows = rows.map((r) => ({
@@ -152,7 +121,7 @@ export async function listData(u: User, kind: string) {
               timeZone: "Asia/Shanghai",
             }),
       }));
-    if (kind === "customers")
+    if (kind === "customers") {
       rows = rows.filter((c) =>
         u.role === "customer"
           ? c.id === u.customer
@@ -160,9 +129,32 @@ export async function listData(u: User, kind: string) {
             ? c.owner === u.id
             : true,
       );
+      if (u.role !== "customer") {
+        const rules = await required(db, "settings", "rules");
+        const orders = (await db.all("orders")).filter(
+          (o) => o.status !== "cancelled",
+        );
+        rows = rows.map((c) => ({
+          ...c,
+          maintenanceDue:
+            c.next ||
+            (c.lastFollow
+              ? new Date(
+                  Date.parse(c.lastFollow) +
+                    86400000 *
+                      (orders.some((o) => o.customer === c.id)
+                        ? rules.customerActive
+                        : rules.customerProspect),
+                )
+                  .toISOString()
+                  .slice(0, 10)
+              : null),
+        }));
+      }
+    }
     const selected: RecordData[] = [];
     for (const r of rows) {
-      if (kind === "mails" && r.sensitive && u.role !== "admin") continue;
+      if (kind === "mails" && r.sensitive && u.role !== "owner") continue;
       if (r.customer && !(await canCustomer(db, u, r.customer))) continue;
       if (
         kind === "quotes" &&
@@ -183,7 +175,7 @@ export async function action(
   body: unknown,
 ): Promise<any> {
   if (actionName === "fx-refresh") {
-    allow(u, ["finance"]);
+    allow(u, ["owner"]);
     return refreshRates(u.id);
   }
   const b = (body || {}) as any;
@@ -217,6 +209,9 @@ export async function action(
             currency: z.enum(["CNY", "USD"]),
             address: text,
             owner: text.optional(),
+            industry: z.string().max(80).optional(),
+            tier: z.enum(["A", "B", "C"]).optional(),
+            phone: z.string().max(80).optional(),
           })
           .parse(b);
         if (v.id && !(await canCustomer(db, u, v.id)))
@@ -268,7 +263,7 @@ export async function action(
           fail("SKU 已存在");
         const old = v.id ? await required(db, "products", v.id) : undefined;
         if (u.role !== "owner" && v.cost !== undefined)
-          throw new ForbiddenException("仅经营负责人可维护成本");
+          throw new ForbiddenException("仅管理人员可维护成本");
         out = await db.put("products", {
           ...old,
           ...v,
@@ -424,9 +419,9 @@ export async function action(
         if (q.status !== "draft") fail("仅草稿可提交");
         if (q.valid < chinaDay()) fail("报价已过期");
         if (q.items.some((i: any) => i.cost == null))
-          fail("存在未核定成本，请经营负责人维护");
+          fail("存在未核定成本，请管理人员维护");
         if (q.fx && stale(q.fx) && !q.fx.confirmedBy)
-          fail("汇率已过期，需财务确认或指定新版本");
+          fail("汇率已过期，需管理确认或指定新版本");
         const rule = await required(db, "settings", "rules");
         const rate =
           q.currency === "USD" ? new Decimal(q.fx.rate) : new Decimal(1);
@@ -440,26 +435,27 @@ export async function action(
           q.items.some((i: any) => i.price < i.listPrice * rule.discount) ||
           converted.minus(cost).div(converted).lt(rule.margin) ||
           q.depositPct < rule.depositPct;
-        if (risk && u.role === "owner")
-          fail("高风险报价需要经营负责人独立审批，请由销售或经理发起");
-        const approvers =
+        const requiredRoles =
           u.role === "owner"
-            ? ["manager"]
+            ? risk
+              ? ["manager", "owner"]
+              : ["manager"]
             : u.role === "manager"
               ? ["owner"]
               : risk
                 ? ["manager", "owner"]
                 : ["manager"];
-        for (const id of approvers)
-          if (
-            !(
-              await db.client.query(
-                "SELECT id FROM users WHERE id=$1 AND active=true",
-                [id],
-              )
-            ).rowCount
-          )
-            fail("审批人不存在或已停用");
+        const approvers: string[] = [];
+        for (const role of requiredRoles) {
+          const candidate = (
+            await db.client.query(
+              "SELECT id FROM users WHERE role=$1 AND active=true AND id<>$2 ORDER BY (id=$1) DESC,id LIMIT 1",
+              [role, u.id],
+            )
+          ).rows[0];
+          if (!candidate) fail("缺少独立审批人，请管理配置其他有效账号");
+          approvers.push(candidate.id);
+        }
         out = await db.put("quotes", {
           ...q,
           status: "pending",
@@ -473,6 +469,7 @@ export async function action(
         break;
       }
       case "quote-decide": {
+        allow(u, ["owner", "manager"]);
         const v = z
           .object({ id: text, approve: z.boolean(), note: text })
           .parse(b);
@@ -550,7 +547,7 @@ export async function action(
         break;
       }
       case "receipt-create": {
-        allow(u, ["finance", ...salesRoles]);
+        allow(u, salesRoles);
         const v = z
           .object({
             transaction: text,
@@ -615,7 +612,7 @@ export async function action(
       }
       case "receipt-verify":
       case "receipt-reverse": {
-        allow(u, ["finance"]);
+        allow(u, ["owner"]);
         const r = await scoped(db, u, "receipts", text.parse(b.id));
         const reverse = actionName === "receipt-reverse";
         if (r.status === (reverse ? "reversed" : "verified")) return r;
@@ -648,7 +645,7 @@ export async function action(
         break;
       }
       case "order-release": {
-        allow(u, ["warehouse"]);
+        allow(u, ["manager"]);
         const o = await scoped(db, u, "orders", text.parse(b.id));
         if (o.status !== "confirmed") fail("订单状态不允许生产");
         if (o.paid < money(new Decimal(o.total).times(o.depositPct).div(100)))
@@ -658,7 +655,7 @@ export async function action(
       }
       case "order-produce":
       case "order-ship": {
-        allow(u, ["warehouse"]);
+        allow(u, ["manager"]);
         const v = z
           .object({
             id: text,
@@ -729,7 +726,7 @@ export async function action(
         break;
       }
       case "shipment-deliver": {
-        allow(u, ["warehouse"]);
+        allow(u, ["manager"]);
         const s = await scoped(db, u, "shipments", text.parse(b.id));
         if (s.delivered) return s;
         const o = await required(db, "orders", s.order);
@@ -751,8 +748,20 @@ export async function action(
         const v = z
           .object({
             customer: text,
-            note: text,
+            note: z.string().trim().min(5).max(1000),
             next: day,
+            channel: z
+              .enum([
+                "电话",
+                "邮件",
+                "即时消息",
+                "拜访",
+                "视频会议",
+                "内部进度",
+              ])
+              .default("邮件"),
+            occurred: z.string().datetime({ offset: true }).optional(),
+            syncCustomer: z.boolean().default(false),
             kind: z
               .enum(["customers", "quotes", "orders"])
               .default("customers"),
@@ -764,13 +773,35 @@ export async function action(
         const c = await required(db, v.kind, v.entity || v.customer);
         if (v.kind !== "customers" && c.customer !== v.customer)
           throw new ForbiddenException();
-        await db.put(v.kind, {
-          ...c,
-          lastFollow: new Date().toISOString(),
-          next: v.next,
-        });
+        const occurred = v.occurred || new Date().toISOString();
+        if (Date.parse(occurred) > Date.now() + 60000)
+          fail("实际沟通时间不能晚于当前时间");
+        if (v.next < chinaDay(new Date(occurred)))
+          fail("下次计划不能早于实际沟通日期");
+        if (v.kind === "orders" && c.status !== "confirmed")
+          fail("已结束订单请改为客户维护");
+        const updateClock = async (kind: string, target: RecordData) => {
+          if (
+            !target.lastFollow ||
+            Date.parse(occurred) >= Date.parse(target.lastFollow)
+          )
+            await db.put(kind, {
+              ...target,
+              lastFollow: occurred,
+              next: v.next,
+            });
+        };
+        await updateClock(v.kind, c);
+        if (v.syncCustomer && v.kind !== "customers") {
+          if (v.channel === "内部进度") fail("内部进度不能同步为客户沟通");
+          await updateClock(
+            "customers",
+            await required(db, "customers", v.customer),
+          );
+        }
         out = await db.put("follows", {
           ...v,
+          occurred,
           id: uid("FL"),
           actor: u.id,
           at: new Date().toISOString(),
@@ -778,7 +809,7 @@ export async function action(
         break;
       }
       case "fx-manual": {
-        allow(u, ["finance"]);
+        allow(u, ["owner"]);
         const v = z
           .object({
             rate: z.coerce.number().positive().max(1000),
@@ -801,7 +832,7 @@ export async function action(
         break;
       }
       case "fx-confirm": {
-        allow(u, ["finance"]);
+        allow(u, ["owner"]);
         const r = await required(db, "rates", text.parse(b.id));
         const reason = text.parse(b.reason);
         out = await db.put("rates", {
@@ -900,7 +931,7 @@ export async function action(
                 .minus(o.discount || 0),
             );
         if (total < 0 || o.paid > total)
-          fail("取消后已收超过新总额或总额无效，请先由财务冲正并核对条款");
+          fail("取消后已收超过新总额或总额无效，请先由管理冲正并核对条款");
         out = await db.put("orders", {
           ...o,
           originalItems,
@@ -931,7 +962,7 @@ export async function action(
         break;
       }
       case "adjustment-create": {
-        allow(u, ["warehouse"]);
+        allow(u, ["manager"]);
         const v = z
           .object({
             product: text,
@@ -991,7 +1022,9 @@ export async function scanReminders() {
     let added = 0;
     const candidates: any[] = [];
     for (const c of await db.all("customers")) {
-      const active = (await db.all("orders")).some((o) => o.customer === c.id);
+      const active = (await db.all("orders")).some(
+        (o) => o.customer === c.id && o.status !== "cancelled",
+      );
       const due = c.next
         ? Date.parse(c.next + "T09:00:00+08:00")
         : Date.parse(c.lastFollow) +
@@ -1043,7 +1076,7 @@ export async function scanReminders() {
           candidates.push({
             customer: o.customer,
             entity: o.id,
-            recipient: "finance",
+            recipient: "owner",
             title: "交期已到，核对尾款 / Payment follow-up",
             due: Date.parse(o.eta + "T09:00:00+08:00"),
           });

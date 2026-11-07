@@ -96,6 +96,8 @@ after(async () => {
     processApi.kill();
     await exited;
   }
+  const db = await import("../dist/server/db.js");
+  await db.pool.end();
   await client?.end();
   await admin.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
   await admin.end();
@@ -108,12 +110,23 @@ test("authentication, CSRF, row scopes and restricted fields", async () => {
   assert.equal((await request("sales", "data/customers")).length, 1);
   assert.equal((await request("buyer", "data/customers"))[0].id, "C-001");
   await request("buyer", "data/receipts", undefined, 403);
-  await request("admin", "data/orders", undefined, 403);
+  await request("admin", "data/orders"); // Legacy admin now has the confirmed management role.
+  assert.equal(users.admin.role, "owner");
+  assert.equal(users.finance.role, "owner");
+  assert.equal(users.warehouse.role, "manager");
+  assert.deepEqual(
+    [...new Set(Object.values(users).map((u) => u.role))].sort(),
+    ["customer", "manager", "owner", "sales"],
+  );
   const p = await request("sales", "data/products");
   assert(!JSON.stringify(p).includes('"cost"'));
   const w = await request("warehouse", "data/products");
-  for (const k of ['"cost"', '"price"', '"usd"'])
-    assert(!JSON.stringify(w).includes(k));
+  for (const k of ['"cost"']) assert(!JSON.stringify(w).includes(k));
+  assert(w[0].price > 0);
+  await act("manager", "receipt-verify", { id: "missing" }, 403);
+  await act("sales", "order-produce", { id: "missing" }, 403);
+  await act("buyer", "follow-create", { customer: "C-001" }, 403);
+  await request("manager", "users", { username: "forbidden" }, 403);
   assert.equal((await request("owner", "data/products"))[0].cost, 31);
 });
 
@@ -440,7 +453,6 @@ test("provider refresh deduplicates, versions corrections, preserves cache on fa
     );
   } finally {
     globalThis.fetch = original;
-    await db.pool.end();
   }
 });
 
@@ -630,4 +642,210 @@ test("API process restart retains business records and sessions", async () => {
   }
   assert.deepEqual(await request("owner", "data/orders"), records);
   assert.equal((await request("owner", "me")).id, "owner");
+});
+
+test("follow-up channels, actual times, backfill, independent clocks and customer isolation", async () => {
+  const now = Date.now(),
+    recent = new Date(now - 3600000).toISOString(),
+    old = new Date(now - 86400000 * 10).toISOString();
+  await client.query(
+    "UPDATE records SET data=data-'lastFollow'-'next' WHERE kind='customers' AND id='C-001'",
+  );
+  const f = await act("sales", "follow-create", {
+    customer: "C-001",
+    note: "确认客户新包装需求，等待图稿",
+    channel: "邮件",
+    occurred: recent,
+    next: "2099-01-01",
+  });
+  assert.equal(f.occurred, recent);
+  assert.equal(f.channel, "邮件");
+  await act("sales", "follow-create", {
+    customer: "C-001",
+    note: "补录早期样品沟通记录",
+    channel: "电话",
+    occurred: old,
+    next: "2098-01-01",
+  });
+  let c = (await request("sales", "data/customers")).find(
+    (c) => c.id === "C-001",
+  );
+  assert.equal(c.lastFollow, recent);
+  assert.equal(c.next, "2099-01-01");
+  await act(
+    "sales",
+    "follow-create",
+    { customer: "C-002", note: "越权修改客户沟通记录", next: "2099-01-01" },
+    403,
+  );
+  await act(
+    "sales",
+    "follow-create",
+    {
+      customer: "C-001",
+      note: "未来沟通时间不能保存",
+      next: "2099-01-01",
+      occurred: new Date(now + 86400000).toISOString(),
+    },
+    400,
+  );
+  const o = (await request("sales", "data/orders")).find(
+    (o) => o.status === "confirmed",
+  );
+  assert(o);
+  await act("sales", "follow-create", {
+    customer: "C-001",
+    kind: "orders",
+    entity: o.id,
+    note: "内部检查生产排期记录",
+    channel: "内部进度",
+    next: "2099-02-01",
+  });
+  c = (await request("sales", "data/customers")).find((c) => c.id === "C-001");
+  assert.equal(c.lastFollow, recent);
+  await act(
+    "sales",
+    "follow-create",
+    {
+      customer: "C-001",
+      kind: "orders",
+      entity: o.id,
+      note: "内部沟通不可重置客户维护",
+      channel: "内部进度",
+      syncCustomer: true,
+      next: "2099-02-01",
+    },
+    400,
+  );
+  await act("sales", "follow-create", {
+    customer: "C-001",
+    kind: "orders",
+    entity: o.id,
+    note: "已与客户确认分批发货安排",
+    channel: "电话",
+    syncCustomer: true,
+    next: "2099-02-01",
+  });
+  c = (await request("sales", "data/customers")).find((c) => c.id === "C-001");
+  assert.equal(c.next, "2099-02-01");
+  await request("buyer", "data/follows", undefined, 403);
+});
+
+test("additive demo fixtures are idempotent and reconcile money, quantities and stock", async () => {
+  const { seedDemoScenarios } = await import("../dist/server/demo.js");
+  const before = (
+    await client.query(
+      "SELECT data FROM records WHERE kind='products' ORDER BY id",
+    )
+  ).rows.map((r) => r.data);
+  const previous = (
+    await client.query(
+      "SELECT data FROM records WHERE kind='customers' AND id='C-001'",
+    )
+  ).rows[0].data;
+  assert.equal((await seedDemoScenarios()).created, true);
+  assert.equal((await seedDemoScenarios()).created, false);
+  const demoLogin = await fetch(url + "login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      username: "buyer_demo",
+      password: "VestaDemo2026!",
+    }),
+  });
+  assert.equal(demoLogin.status, 201);
+  users.buyer_demo = {
+    ...(await demoLogin.json()),
+    cookie: demoLogin.headers.get("set-cookie").split(";")[0],
+  };
+  const ownDemoOrders = await request("buyer_demo", "data/orders");
+  assert.equal(ownDemoOrders.length, 1);
+  assert.equal(ownDemoOrders[0].customer, "DEMO-C-1");
+  assert(!JSON.stringify(ownDemoOrders).includes('"cost"'));
+  const os = (await request("owner", "data/orders")).filter((o) => o.demo);
+  assert.equal(os.length, 5);
+  assert.equal(new Set(os.map((o) => o.customer)).size, 5);
+  const receipts = (await request("owner", "data/receipts")).filter(
+      (r) => r.demo,
+    ),
+    ships = (await request("owner", "data/shipments")).filter((r) => r.demo);
+  for (const o of os) {
+    assert.equal(
+      o.paid,
+      receipts
+        .flatMap((r) => r.allocations)
+        .filter((a) => a.order === o.id)
+        .reduce((s, a) => s + a.amount, 0),
+    );
+    assert.equal(
+      o.total,
+      Math.round(o.items.reduce((s, i) => s + i.price * i.qty, 0) * 100) / 100,
+    );
+    for (const i of o.items) {
+      assert(
+        i.delivered <= i.shipped &&
+          i.shipped <= i.produced &&
+          i.produced <= i.qty,
+      );
+      assert.equal(
+        i.shipped,
+        ships
+          .filter((s) => s.order === o.id && s.product === i.product)
+          .reduce((n, s) => n + s.qty, 0),
+      );
+      assert.equal(
+        i.delivered,
+        ships
+          .filter(
+            (s) => s.order === o.id && s.product === i.product && s.delivered,
+          )
+          .reduce((n, s) => n + s.qty, 0),
+      );
+    }
+    if (o.status === "completed") {
+      assert.equal(o.paid, o.total);
+      assert(o.items.every((i) => i.delivered === i.qty));
+    }
+  }
+  const products = await request("owner", "data/products");
+  for (const p of before) {
+    const n = products.find((x) => x.id === p.id),
+      delta = os
+        .flatMap((o) => o.items)
+        .filter((i) => i.product === p.id)
+        .reduce((s, i) => s + i.produced - i.shipped, 0);
+    assert.equal(n.stock, p.stock + delta);
+    assert.equal(n.reserved, p.reserved + delta);
+  }
+  assert.deepEqual(
+    (
+      await client.query(
+        "SELECT data FROM records WHERE kind='customers' AND id='C-001'",
+      )
+    ).rows[0].data,
+    previous,
+  );
+  assert(!(await request("buyer", "data/orders")).some((o) => o.demo));
+  assert(
+    (await request("sales", "data/customers"))
+      .filter((c) => c.demo)
+      .every((c) => c.owner === "sales"),
+  );
+});
+
+test("existing role migration retains identity, scope and history and runs once", async () => {
+  await client.query("UPDATE users SET role='finance' WHERE id='finance'");
+  const { seed } = await import("../dist/server/seed.js");
+  await seed();
+  await seed();
+  const u = (
+    await client.query("SELECT id,username,role FROM users WHERE id='finance'")
+  ).rows[0];
+  assert.deepEqual(u, { id: "finance", username: "finance", role: "owner" });
+  const audit = (
+    await client.query(
+      "SELECT data FROM records WHERE kind='audits' AND data->>'entity'='finance' AND data->>'action'='four-role-migration:owner'",
+    )
+  ).rows;
+  assert.equal(audit.length, 1);
 });

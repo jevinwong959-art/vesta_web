@@ -9,6 +9,7 @@
     "start": "node dist/server/main.js",
     "test": "tsc -p tsconfig.server.json && node --test tests/*.test.mjs",
     "local": "node scripts/local.mjs",
+    "demo:data": "tsc -p tsconfig.server.json && node scripts/demo-data.mjs",
     "db": "node scripts/database.mjs",
     "check": "pnpm build && pnpm test",
     "skill:install": "node scripts/install-skill.mjs"
