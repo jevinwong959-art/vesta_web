@@ -1,0 +1,502 @@
+/* VESTA-220: presentation-only refinement of the existing Vesta components.
+   Screen-scoped so quotation print layouts retain their established styling.
+   Preserve the established light workspace and semantic status colors. */
+@media screen {
+  :root {
+    --green: #146c5b;
+    --teal: var(--green);
+    --ink: #203c37;
+    --muted: #60736d;
+    --line: #dce5df;
+    --surface: #ffffff;
+    --canvas: #f3f5f1;
+    --surface-soft: #f7f9f6;
+    --accent-soft: #e7f1eb;
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    background: var(--canvas);
+  }
+  main {
+    min-height: 100dvh;
+  }
+  .content {
+    max-width: 1600px;
+    padding: 32px;
+  }
+  .page-heading {
+    margin-bottom: 28px;
+  }
+  .page-heading h1 {
+    font-size: 28px;
+    line-height: 1.4;
+    letter-spacing: -0.7px;
+  }
+  .page-heading p {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--muted);
+  }
+  .eyebrow {
+    letter-spacing: 1.5px;
+    color: var(--green);
+  }
+  .topbar {
+    background: var(--surface);
+    padding-inline: 32px;
+  }
+  .breadcrumb,
+  .connection {
+    color: var(--muted);
+  }
+  .top-actions {
+    gap: 12px;
+  }
+  .workspace:not(.portal-layout) > .sidebar {
+    background: #183b32;
+    padding: 28px 16px 20px;
+    border-right: 1px solid #24473d;
+  }
+  .sidebar .brand-symbol {
+    background: #b9d9c6;
+    color: #183b32;
+  }
+  .sidebar .brand small {
+    color: #acc5b8;
+  }
+  .nav-caption {
+    margin: 32px 12px 12px;
+    color: #acc5b8;
+  }
+  .nav-section {
+    color: #acc5b8;
+    font-size: 10px;
+    letter-spacing: 1px;
+    padding: 20px 12px 8px;
+  }
+  .workspace:not(.portal-layout) .nav-item {
+    color: #c7d8cf;
+    padding: 10px 12px;
+    border-radius: 6px;
+  }
+  .workspace:not(.portal-layout) .nav-item:hover {
+    background: #244a3e;
+  }
+  .workspace:not(.portal-layout) .nav-item.active {
+    color: #f5faf6;
+    background: #32614f;
+    box-shadow: inset 3px 0 #b9d9c6;
+  }
+  .workspace:not(.portal-layout) .nav-item.active svg {
+    color: #c3e4cf;
+  }
+  .sidebar .profile small,
+  .local-label small {
+    color: #adc6b7;
+  }
+  .sidebar .avatar {
+    background: #365d4b;
+    color: #f1f7f2;
+  }
+  .side-foot {
+    padding-top: 16px;
+  }
+  .local-label {
+    border-color: #426454;
+    color: #bfd3c6;
+  }
+  .btn {
+    min-height: 38px;
+    border-radius: 7px;
+    border-color: #cedbd3;
+    font-weight: 600;
+  }
+  .btn:hover {
+    background: var(--surface-soft);
+    border-color: #a4bcae;
+  }
+  .btn.primary {
+    background: var(--green);
+    border-color: var(--green);
+    color: #fff;
+  }
+  .btn.primary:hover {
+    background: #105744;
+    border-color: #105744;
+  }
+  .btn.soft {
+    background: var(--accent-soft);
+    color: var(--green);
+  }
+  .btn.compact {
+    min-height: 32px;
+  }
+  .icon-btn {
+    min-width: 36px;
+    min-height: 36px;
+  }
+  .topbar .icon-btn:hover,
+  .modal .icon-btn:hover {
+    background: var(--accent-soft);
+  }
+  button:focus-visible,
+  a:focus-visible {
+    outline: 3px solid #399578;
+    outline-offset: 3px;
+  }
+  input,
+  select,
+  textarea {
+    border-color: #cbd9d0;
+    border-radius: 7px;
+  }
+  input:focus,
+  select:focus,
+  textarea:focus {
+    border-color: var(--green);
+    box-shadow: 0 0 0 3px #146c5b18;
+  }
+  .card,
+  .product-card {
+    border-color: var(--line);
+    border-radius: 10px;
+    box-shadow: 0 2px 6px #203c3704;
+  }
+  .card-head {
+    padding: 20px 24px;
+    border-bottom-color: var(--line);
+  }
+  .card-head h3 {
+    font-size: 15px;
+  }
+  .card-head small,
+  .sub,
+  .crm-stat > small,
+  .stat-label,
+  .stage-flow small,
+  .profile-kv small,
+  .crm-profile .profile-summary p {
+    color: var(--muted);
+  }
+  .crm-stats {
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .crm-stat {
+    padding: 20px 24px;
+    box-shadow: none;
+    border-top: 3px solid #b7ccbd;
+  }
+  .crm-stat:first-child {
+    border-top-color: var(--green);
+    background: #edf4ee;
+  }
+  .crm-stat > strong {
+    font-size: clamp(23px, 2vw, 32px);
+    letter-spacing: -1px;
+    margin: 16px 0 8px;
+  }
+  .stat-label {
+    font-size: 13px;
+  }
+  .stat-label > span {
+    background: var(--accent-soft);
+    color: var(--green);
+    border-radius: 6px;
+  }
+  .crm-stat > small {
+    font-size: 12px;
+  }
+  .stage-flow {
+    border-radius: 10px;
+    margin: 24px 0;
+  }
+  .stage-flow > button {
+    padding: 16px 20px;
+  }
+  .stage-flow > button:last-child {
+    border-right: 0;
+  }
+  .stage-flow > button:hover {
+    background: var(--accent-soft);
+  }
+  .stage-flow strong {
+    display: block;
+    margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .stage-flow span {
+    display: none;
+  }
+  .toolbar {
+    padding: 16px 20px;
+    border-radius: 10px 10px 0 0;
+  }
+  .toolbar + .card {
+    border-radius: 0 0 10px 10px;
+  }
+  .crm-toolbar {
+    padding: 16px 20px;
+    background: var(--surface-soft);
+  }
+  .search input,
+  .toolbar select {
+    font-size: 13px;
+  }
+  .table-scroll table {
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+  .table-scroll th {
+    padding: 13px 20px;
+    background: #eef3ee;
+    color: #536b60;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .table-scroll td {
+    padding: 18px 20px;
+    border-bottom-color: #e7ede7;
+  }
+  .table-scroll tbody tr:hover {
+    background: #f3f8f2;
+  }
+  .table-scroll tr:last-child td {
+    border-bottom: 0;
+  }
+  .sub {
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .badge {
+    font-weight: 600;
+    padding: 4px 9px;
+    border-radius: 5px;
+  }
+  .crm-avatar {
+    background: var(--accent-soft);
+    border-radius: 8px;
+  }
+  .priority-tasks {
+    padding-inline: 24px;
+  }
+  .priority-tasks button {
+    padding-block: 18px;
+    color: var(--ink);
+  }
+  .priority-tasks strong {
+    font-size: 13px;
+  }
+  .priority-tasks button:hover {
+    background: var(--surface-soft);
+  }
+  .chart-legend span + span {
+    color: #58796a;
+  }
+  .modal {
+    border: 1px solid #cadad0;
+    border-radius: 12px;
+    box-shadow: 0 24px 80px #102c3433;
+  }
+  .modal-head {
+    background: var(--surface-soft);
+    padding: 22px 26px;
+  }
+  .modal-head h2 {
+    font-size: 20px;
+  }
+  .modal-foot,
+  .modal-actions {
+    background: var(--surface-soft);
+  }
+  .modal-body {
+    scrollbar-gutter: stable;
+  }
+  .portal-layout > .sidebar {
+    visibility: visible;
+    border-bottom-color: var(--line);
+  }
+  .portal-layout .sidebar .nav-item {
+    color: var(--muted);
+    border-radius: 6px;
+  }
+  .portal-layout .sidebar .nav-item.active {
+    color: var(--green);
+    background: var(--accent-soft);
+  }
+  .portal-layout .sidebar .nav-item.active svg {
+    color: var(--green);
+  }
+  .portal-layout .sidebar .brand small,
+  .portal-layout .profile small {
+    color: var(--muted);
+  }
+  .portal-welcome {
+    background: #e9f0e6;
+    border-color: #d5e2d2;
+    border-radius: 12px;
+  }
+  .portal-welcome p,
+  .portal-company small {
+    color: #526e60;
+  }
+  .portal-company {
+    background: #f8faf5;
+    border-color: #d5e2d2;
+    border-radius: 8px;
+  }
+  .product-info {
+    padding: 22px;
+  }
+  .product-art {
+    border-bottom: 1px solid var(--line);
+  }
+  .product-price {
+    font-variant-numeric: tabular-nums;
+  }
+  .basket-bar {
+    border-color: #b6cdbd;
+    box-shadow: 0 6px 24px #203c3712;
+  }
+  .login {
+    background: var(--canvas);
+    min-height: 100dvh;
+  }
+  .login-story {
+    background: #183b32;
+    min-height: 100dvh;
+  }
+  .login-story .eyebrow {
+    color: #b5ccbd;
+  }
+  .login-story p,
+  .login-story > small,
+  .login-stats small {
+    color: #b5ccbd;
+  }
+  .login-stats > span {
+    font-family: inherit;
+    color: #d3e6d7;
+  }
+  .login-card {
+    max-width: 420px;
+  }
+  .login-card > p,
+  .login-card .login-security,
+  .demo-accounts > small,
+  .demo-accounts button small {
+    color: var(--muted);
+  }
+  .demo-accounts button {
+    color: #4d6957;
+    font-size: 12px;
+  }
+  .demo-accounts button.selected {
+    background: var(--accent-soft);
+    border-color: var(--green);
+    color: var(--green);
+  }
+  .empty {
+    padding: 48px 24px;
+  }
+}
+@media screen and (max-width: 1100px) {
+  .content {
+    padding: 24px;
+  }
+  .crm-stat {
+    padding: 16px;
+  }
+  .stage-flow > button {
+    padding: 14px 12px;
+  }
+}
+@media screen and (max-width: 760px) {
+  .content {
+    padding: 24px 16px;
+  }
+  .topbar {
+    padding-inline: 16px;
+  }
+  .page-heading h1 {
+    font-size: 25px;
+  }
+  .crm-stats {
+    gap: 12px;
+  }
+  .crm-stat {
+    padding: 16px 12px;
+  }
+  .crm-stat > strong {
+    font-size: clamp(19px, 5vw, 26px);
+    overflow-wrap: anywhere;
+  }
+  .stat-label {
+    font-size: 12px;
+    gap: 6px;
+  }
+  .stat-label > span {
+    padding: 5px;
+  }
+  .card-head {
+    padding: 16px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .toolbar,
+  .crm-toolbar {
+    padding: 12px;
+  }
+  .btn,
+  .icon-btn {
+    min-height: 40px;
+  }
+  .top-actions {
+    gap: 8px;
+  }
+  .modal-head {
+    padding: 16px;
+  }
+  .modal-head h2 {
+    font-size: 18px;
+  }
+  .login-story {
+    min-height: auto;
+  }
+  .login-panel {
+    padding: 32px 24px;
+  }
+}
+@media screen and (max-width: 480px) {
+  .workspace .topbar {
+    height: auto;
+    min-height: 60px;
+    padding-block: 10px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .workspace .breadcrumb {
+    flex-basis: 100%;
+  }
+  .workspace .top-actions {
+    flex-wrap: wrap;
+    margin-left: auto;
+  }
+}
+@media screen and (prefers-reduced-motion: no-preference) {
+  .btn,
+  .nav-item,
+  .icon-btn {
+    transition:
+      background-color 140ms ease,
+      border-color 140ms ease;
+  }
+}
+@media screen and (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition: none;
+  }
+}

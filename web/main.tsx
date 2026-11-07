@@ -31,6 +31,7 @@ import {
 import "./style.css";
 import "./prototype.css";
 import "./parity.css";
+import "./refinement.css";
 import { ModalAccess } from "./modal-access";
 import { businessDay, businessNow, setReferenceDate } from "./clock";
 import {
@@ -1107,20 +1108,27 @@ function App() {
         <div className="nav-caption">
           {portal ? "CUSTOMER PORTAL" : "BUSINESS OPERATIONS"}
         </div>
-        <nav>
+        <nav aria-label={T("主导航", "Main navigation")}>
           {navigation
             .filter((n) => allowed(n[0]))
             .map(([id, zh, eng, Icon]) => (
-              <button
-                key={id}
-                className={page === id ? "nav-item active" : "nav-item"}
-                onClick={() => go(id)}
-              >
-                <Icon size={18} />
-                <span>{portal ? T(...portalTitles[id]) : T(zh, eng)}</span>
-                {id === "notifications" &&
-                  rows("notifications").some((n) => !n.read) && <i />}
-              </button>
+              <React.Fragment key={id}>
+                {!portal && id === "notifications" && (
+                  <div className="nav-section">
+                    {T("协作与管理", "Workspace tools")}
+                  </div>
+                )}
+                <button
+                  aria-current={page === id ? "page" : undefined}
+                  className={page === id ? "nav-item active" : "nav-item"}
+                  onClick={() => go(id)}
+                >
+                  <Icon size={18} />
+                  <span>{portal ? T(...portalTitles[id]) : T(zh, eng)}</span>
+                  {id === "notifications" &&
+                    rows("notifications").some((n) => !n.read) && <i />}
+                </button>
+              </React.Fragment>
             ))}
         </nav>
         <div className="side-foot">
