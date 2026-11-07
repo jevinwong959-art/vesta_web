@@ -7,7 +7,7 @@ import { z } from "zod";
 import Decimal from "decimal.js";
 import { RecordData, Store, read, transaction, uid } from "./db";
 import { User, allow } from "./auth";
-import { latestRate, stale, refreshRates } from "./fx";
+import { latestRate, stale, refreshRates, chinaDay } from "./fx";
 
 const text = z.string().trim().min(1).max(500);
 const amount = z.coerce
@@ -114,7 +114,7 @@ export async function listData(u: User, kind: string) {
   if (!supported.includes(kind)) throw new NotFoundException();
   return read(async (db) => {
     if (u.role === "admin") {
-      if (kind !== "settings") throw new ForbiddenException();
+      if (!["settings", "mails"].includes(kind)) throw new ForbiddenException();
     }
     if (
       u.role === "customer" &&
@@ -138,10 +138,20 @@ export async function listData(u: User, kind: string) {
     )
       throw new ForbiddenException();
     if (kind === "audits") allow(u, ["owner"]);
-    if (kind === "mails") allow(u, ["owner", "finance", "manager"]);
+    if (kind === "mails") allow(u, ["admin", "owner", "finance", "manager"]);
     if (kind === "rates") allow(u, ["owner", "manager", "sales", "finance"]);
     if (kind === "settings") allow(u, ["owner", "manager", "finance", "admin"]);
     let rows = await db.all(kind);
+    if (kind === "rates")
+      rows = rows.map((r) => ({
+        ...r,
+        invalid:
+          !r.manual &&
+          r.date >
+            new Date().toLocaleDateString("en-CA", {
+              timeZone: "Asia/Shanghai",
+            }),
+      }));
     if (kind === "customers")
       rows = rows.filter((c) =>
         u.role === "customer"
@@ -152,6 +162,7 @@ export async function listData(u: User, kind: string) {
       );
     const selected: RecordData[] = [];
     for (const r of rows) {
+      if (kind === "mails" && r.sensitive && u.role !== "admin") continue;
       if (r.customer && !(await canCustomer(db, u, r.customer))) continue;
       if (
         kind === "quotes" &&
@@ -179,6 +190,20 @@ export async function action(
   const result = await transaction(async (db) => {
     let out: RecordData;
     switch (actionName) {
+      case "customer-profile": {
+        allow(u, ["customer"]);
+        const v = z
+          .object({
+            contact: text,
+            email: z.email(),
+            address: text,
+            phone: z.string().max(80).default(""),
+          })
+          .parse(b);
+        const c = await required(db, "customers", u.customer!);
+        out = await db.put("customers", { ...c, ...v });
+        break;
+      }
       case "customer-save": {
         allow(u, salesRoles);
         const v = z
@@ -289,6 +314,7 @@ export async function action(
           .object({
             id: text.optional(),
             revisionOf: text.optional(),
+            inquiry: text.optional(),
             customer: text,
             currency: z.enum(["CNY", "USD"]),
             items: z
@@ -310,6 +336,11 @@ export async function action(
           .parse(b);
         if (!(await canCustomer(db, u, v.customer)))
           throw new ForbiddenException();
+        if (v.inquiry) {
+          const inquiry = await scoped(db, u, "inquiries", v.inquiry);
+          if (inquiry.customer !== v.customer) fail("询价客户与报价客户不一致");
+          await db.put("inquiries", { ...inquiry, status: "quoted" });
+        }
         const previous = v.id ? await scoped(db, u, "quotes", v.id) : undefined;
         if (previous && previous.status !== "draft")
           fail("冻结版本不能修改，请创建新版本");
@@ -350,6 +381,16 @@ export async function action(
               : previous?.fx || (await latestRate(db))
             : undefined;
         if (v.currency === "USD" && !fx) fail("缺少可用汇率");
+        if (
+          fx &&
+          (fx.invalid ||
+            (!fx.manual &&
+              fx.date >
+                new Date().toLocaleDateString("en-CA", {
+                  timeZone: "Asia/Shanghai",
+                })))
+        )
+          fail("汇率日期无效，请选择可用版本");
         const customer = await required(db, "customers", v.customer);
         const group = revision?.group || previous?.group || uid("QG");
         const revisionNo = revision
@@ -381,7 +422,7 @@ export async function action(
         allow(u, salesRoles);
         const q = await scoped(db, u, "quotes", text.parse(b.id));
         if (q.status !== "draft") fail("仅草稿可提交");
-        if (q.valid < new Date().toISOString().slice(0, 10)) fail("报价已过期");
+        if (q.valid < chinaDay()) fail("报价已过期");
         if (q.items.some((i: any) => i.cost == null))
           fail("存在未核定成本，请经营负责人维护");
         if (q.fx && stale(q.fx) && !q.fx.confirmedBy)
@@ -427,6 +468,7 @@ export async function action(
           step: 0,
           risk,
           submittedAt: new Date().toISOString(),
+          stepStartedAt: new Date().toISOString(),
         });
         break;
       }
@@ -445,6 +487,7 @@ export async function action(
         out = await db.put("quotes", {
           ...q,
           step,
+          stepStartedAt: new Date().toISOString(),
           status: v.approve
             ? step === q.approvers.length
               ? "approved"
@@ -480,11 +523,7 @@ export async function action(
         const q = await scoped(db, u, "quotes", text.parse(b.id));
         const existing = (await db.all("orders")).find((o) => o.quote === q.id);
         if (existing) return existing;
-        if (
-          q.status !== "approved" ||
-          !q.published ||
-          q.valid < new Date().toISOString().slice(0, 10)
-        )
+        if (q.status !== "approved" || !q.published || q.valid < chinaDay())
           fail("报价未发布、已过期或已作废");
         if ((await db.all("orders")).some((o) => o.quoteGroup === q.group))
           fail("同一报价系列已成交");
@@ -499,6 +538,15 @@ export async function action(
           createdAt: new Date().toISOString(),
         });
         await db.put("quotes", { ...q, status: "accepted" });
+        if (q.inquiry) {
+          const inquiry = await db.get("inquiries", q.inquiry);
+          if (inquiry)
+            await db.put("inquiries", {
+              ...inquiry,
+              status: "ordered",
+              order: out.id,
+            });
+        }
         break;
       }
       case "receipt-create": {
@@ -818,6 +866,70 @@ export async function action(
         });
         break;
       }
+      case "order-cancel-remainder": {
+        allow(u, ["owner", "manager"]);
+        const v = z
+          .object({ id: text, product: text, qty, reason: text, key: text })
+          .parse(b);
+        const o = await scoped(db, u, "orders", v.id);
+        const op = await db.get("operations", v.key);
+        if (op) {
+          if (op.entity !== o.id || op.action !== actionName)
+            fail("幂等键冲突");
+          return o;
+        }
+        if (o.status !== "confirmed") fail("订单不在履约状态");
+        const i = o.items.find((i: any) => i.product === v.product);
+        if (!i || v.qty > i.qty - i.produced) fail("只能取消尚未生产的数量");
+        const originalItems = o.originalItems || structuredClone(o.items);
+        const originalTotal = o.originalTotal ?? o.total;
+        i.qty -= v.qty;
+        i.cancelled = (i.cancelled || 0) + v.qty;
+        const empty = o.items.every((i: any) => i.qty === 0);
+        const total = empty
+          ? 0
+          : money(
+              o.items
+                .reduce(
+                  (sum: Decimal, i: any) =>
+                    sum.plus(new Decimal(i.price).times(i.qty)),
+                  new Decimal(0),
+                )
+                .plus(o.freight || 0)
+                .plus(o.fees || 0)
+                .minus(o.discount || 0),
+            );
+        if (total < 0 || o.paid > total)
+          fail("取消后已收超过新总额或总额无效，请先由财务冲正并核对条款");
+        out = await db.put("orders", {
+          ...o,
+          originalItems,
+          originalTotal,
+          total,
+          status: empty
+            ? "cancelled"
+            : o.paid === total &&
+                o.items.every((i: any) => i.delivered === i.qty)
+              ? "completed"
+              : "confirmed",
+          amendments: [
+            ...(o.amendments || []),
+            {
+              product: v.product,
+              qty: v.qty,
+              reason: v.reason,
+              actor: u.id,
+              at: new Date().toISOString(),
+            },
+          ],
+        });
+        await db.put("operations", {
+          id: v.key,
+          action: actionName,
+          entity: o.id,
+        });
+        break;
+      }
       case "adjustment-create": {
         allow(u, ["warehouse"]);
         const v = z
@@ -899,7 +1011,9 @@ export async function scanReminders() {
           entity: q.id,
           recipient: q.approvers[q.step],
           title: "报价审批逾期 / Approval overdue",
-          due: Date.parse(q.submittedAt) + rule.approvalHours * 3600000,
+          due:
+            Date.parse(q.stepStartedAt || q.submittedAt) +
+            rule.approvalHours * 3600000,
         });
       if (q.status === "approved" && q.published)
         candidates.push({
@@ -940,7 +1054,7 @@ export async function scanReminders() {
         ? ["normal", "escalation"]
         : ["normal"]) {
         const recipient = level === "escalation" ? "owner" : t.recipient;
-        const key = `${t.entity}:${t.due}:${recipient}:${level}`;
+        const key = `${t.entity}:${t.title}:${t.due}:${recipient}:${level}`;
         activeKeys.add(key);
         if (await db.get("notifications", key)) continue;
         await db.put("notifications", {

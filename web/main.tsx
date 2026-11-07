@@ -50,6 +50,7 @@ type Form = {
   submit: (v: any) => Promise<any>;
   quote?: boolean;
   items?: any[];
+  allocations?: { order: string; amount: number }[];
 };
 const ruleNames: Record<string, string> = {
   orderDays: "订单跟进周期（天）",
@@ -152,7 +153,7 @@ function App() {
     if (!user) return;
     const kinds =
       user.role === "admin"
-        ? ["settings"]
+        ? ["settings", "mails"]
         : portal
           ? [
               "customers",
@@ -199,12 +200,17 @@ function App() {
     );
     const next = Object.fromEntries(result);
     if (["admin", "owner"].includes(user.role)) next.users = await api("users");
+    if (user.role === "admin")
+      next.customerDirectory = await api("customer-directory");
+    if (["owner", "manager"].includes(user.role))
+      next.salesDirectory = await api("sales-directory");
     setData(next);
   }
   useEffect(() => {
     fetch("/api/v1/me")
       .then(async (r) => {
-        if (r.ok) setUser(await r.json());
+        if (r.ok && !new URLSearchParams(location.search).has("reset"))
+          setUser(await r.json());
       })
       .finally(() => setReady(true));
   }, []);
@@ -272,6 +278,19 @@ function App() {
         { key: "contact", label: "联系人 / Contact", value: c?.contact },
         { key: "email", label: "Email", type: "email", value: c?.email },
         { key: "address", label: "地址 / Address", value: c?.address },
+        ...(["owner", "manager"].includes(user?.role || "")
+          ? [
+              {
+                key: "owner",
+                label: "业务负责人",
+                options: rows("salesDirectory").map((s) => ({
+                  value: s.id,
+                  label: s.name,
+                })),
+                value: c?.owner || "sales",
+              },
+            ]
+          : []),
         {
           key: "currency",
           label: "币种 / Currency",
@@ -445,6 +464,7 @@ function App() {
       submit: (v) =>
         run("quote-save", {
           ...v,
+          inquiry: source?.id || q?.inquiry,
           fxId: v.fxId || undefined,
           ...(q
             ? q.status === "draft"
@@ -458,13 +478,13 @@ function App() {
     setDetail(null);
     setForm({
       title: T("提交回款线索", "Record receipt"),
-      fields: [
+      allocations: [
         {
-          key: "order",
-          label: "订单 / Order",
-          options: orderOptions,
-          value: o?.id,
+          order: o?.id || orderOptions[0]?.value || "",
+          amount: o ? Math.max(0, o.total - o.paid) : 0,
         },
+      ],
+      fields: [
         {
           key: "currency",
           label: "币种",
@@ -486,7 +506,7 @@ function App() {
           currency: v.currency,
           amount: v.amount,
           note: v.note,
-          allocations: [{ order: v.order, amount: Number(v.amount) }],
+          allocations: v.allocations,
         }),
     });
   }
@@ -537,7 +557,7 @@ function App() {
   }
   const allowed = (id: string) =>
     user?.role === "admin"
-      ? id === "settings"
+      ? ["settings", "mails"].includes(id)
       : portal
         ? [
             "dashboard",
@@ -707,6 +727,7 @@ function App() {
           <div className="breadcrumb">
             <button
               className="icon-btn mobile-toggle"
+              aria-label="打开导航菜单"
               onClick={() => setMobile(!mobile)}
             >
               <Menu size={20} />
@@ -751,6 +772,87 @@ function App() {
               </p>
             </div>
             <div className="heading-actions">
+              {page === "settings" &&
+                user.role === "admin" &&
+                btn(
+                  "+ 创建账号",
+                  () =>
+                    setForm({
+                      title: "创建本地账号",
+                      fields: [
+                        { key: "username", label: "登录账号（小写字母开头）" },
+                        { key: "name", label: "显示姓名" },
+                        {
+                          key: "role",
+                          label: "角色",
+                          options: [
+                            { value: "sales", label: "销售" },
+                            { value: "customer", label: "客户门户" },
+                            { value: "finance", label: "财务" },
+                            { value: "warehouse", label: "仓储" },
+                          ],
+                        },
+                        {
+                          key: "customer",
+                          label: "关联客户公司（客户账号必选）",
+                          required: false,
+                          options: [
+                            { value: "", label: "员工账号无需选择" },
+                            ...rows("customerDirectory").map((c) => ({
+                              value: c.id,
+                              label: c.name,
+                            })),
+                          ],
+                        },
+                        {
+                          key: "password",
+                          label: "初始密码（至少10位）",
+                          type: "password",
+                          value: "VestaDemo2026!",
+                        },
+                      ],
+                      submit: async (v) => {
+                        const r = await api("users", v);
+                        await load();
+                        setNotice("账号已创建，本地邀请已捕获");
+                        return r;
+                      },
+                    }),
+                  true,
+                )}
+              {portal &&
+                btn(T("修改联系资料", "Edit contact details"), () => {
+                  const c = rows("customers")[0];
+                  if (c)
+                    openForm(
+                      T("联系资料", "Contact details"),
+                      [
+                        {
+                          key: "contact",
+                          label: "联系人 / Contact",
+                          value: c.contact,
+                        },
+                        {
+                          key: "email",
+                          label: "Email",
+                          type: "email",
+                          value: c.email,
+                        },
+                        {
+                          key: "address",
+                          label: "地址 / Address",
+                          value: c.address,
+                        },
+                        {
+                          key: "phone",
+                          label: "电话 / Phone",
+                          value: c.phone || "",
+                          required: false,
+                        },
+                      ],
+                      "customer-profile",
+                    );
+                })}
               {page === "customers" &&
                 sales &&
                 btn("+ 新增客户", () => createCustomer(), true)}
@@ -1097,6 +1199,25 @@ function App() {
               )}
             </section>
           )}
+          {page === "customers" && sales && (
+            <section className="card section-gap">
+              <div className="card-head">
+                <h3>跟进历史</h3>
+              </div>
+              {table(
+                ["客户", "内容", "下次跟进", "记录时间"],
+                rows("follows")
+                  .slice()
+                  .reverse()
+                  .map((f) => [
+                    customer(f.customer),
+                    f.note,
+                    f.next,
+                    new Date(f.at).toLocaleString(),
+                  ]),
+              )}
+            </section>
+          )}
           {page === "inquiries" && (
             <section className="card">
               {table(
@@ -1319,6 +1440,7 @@ function App() {
                         <small className="sub">
                           {r.source}
                           {r.simulated ? " · 模拟" : ""}
+                          {r.invalid ? " · 数据日期异常（不可采用）" : ""}
                         </small>
                       </>,
                       <strong>{r.rate}</strong>,
@@ -1569,6 +1691,7 @@ function App() {
         <FormModal
           form={form}
           products={rows("products")}
+          orders={orderOptions}
           onClose={() => setForm(null)}
           onError={setError}
           onSuccess={() => {
@@ -1805,6 +1928,35 @@ function App() {
                     { id: detail.id },
                   ),
                 )}
+              {page === "orders" &&
+                ["owner", "manager"].includes(user.role) &&
+                detail.status === "confirmed" &&
+                btn("取消部分未生产数量", () =>
+                  openForm(
+                    "取消剩余数量",
+                    [
+                      {
+                        key: "product",
+                        label: "商品",
+                        options: detail.items
+                          .filter((i: any) => i.qty > i.produced)
+                          .map((i: any) => ({
+                            value: i.product,
+                            label: `${i.sku} · 可取消 ${i.qty - i.produced}`,
+                          })),
+                      },
+                      {
+                        key: "qty",
+                        label: "取消数量",
+                        type: "number",
+                        value: 1,
+                      },
+                      { key: "reason", label: "客户沟通依据 / 原因" },
+                    ],
+                    "order-cancel-remainder",
+                    { id: detail.id, key: crypto.randomUUID() },
+                  ),
+                )}
               {btn(T("关闭", "Close"), () => setDetail(null))}
             </div>
           </section>
@@ -1822,6 +1974,10 @@ function Login({
 }) {
   const [username, setUsername] = useState("owner"),
     [password, setPassword] = useState("VestaDemo2026!"),
+    [resetToken, setResetToken] = useState(
+      new URLSearchParams(location.search).get("reset") || "",
+    ),
+    [localMessage, setLocalMessage] = useState(""),
     [busy, setBusy] = useState(false);
   return (
     <div className="login">
@@ -1863,13 +2019,28 @@ function Login({
       <section className="login-panel">
         <div className="login-card">
           <span className="eyebrow">WELCOME TO YOUR WORKSPACE</span>
-          <h2>登录工作空间</h2>
+          <h2>{resetToken ? "设置新密码" : "登录工作空间"}</h2>
           <p>使用独立账号体验真实权限与业务流程。</p>
           <form
             onSubmit={async (e) => {
               e.preventDefault();
               setBusy(true);
-              await onLogin({ username, password });
+              if (resetToken) {
+                try {
+                  const r = await fetch("/api/v1/password/reset", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ token: resetToken, password }),
+                  });
+                  const v = await r.json();
+                  if (!r.ok) throw new Error(v.message);
+                  setResetToken("");
+                  history.replaceState(null, "", location.pathname);
+                  setLocalMessage("密码已更新，请用新密码登录。");
+                } catch (e) {
+                  setLocalMessage((e as Error).message);
+                }
+              } else await onLogin({ username, password });
               setBusy(false);
             }}
           >
@@ -1891,11 +2062,34 @@ function Login({
               />
             </label>
             {error && <div className="alert error">{error}</div>}
+            {localMessage && (
+              <div className="notice-box section-gap">{localMessage}</div>
+            )}
             <button className="btn primary login-submit" disabled={busy}>
-              {busy ? "正在登录…" : "进入工作空间"}
+              {busy ? "处理中…" : resetToken ? "保存新密码" : "进入工作空间"}
               <ArrowUpRight size={18} />
             </button>
           </form>
+          {!resetToken && (
+            <button
+              className="link section-gap"
+              onClick={async () => {
+                try {
+                  const r = await fetch("/api/v1/password/request", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ username }),
+                  });
+                  const v = await r.json();
+                  setLocalMessage(v.message);
+                } catch (e) {
+                  setLocalMessage((e as Error).message);
+                }
+              }}
+            >
+              忘记密码？生成本地恢复邮件
+            </button>
+          )}
           <div className="demo-accounts">
             <small>本地演示账号 · 密码 VestaDemo2026!</small>
             <div>
@@ -1931,12 +2125,14 @@ function Login({
 function FormModal({
   form,
   products,
+  orders,
   onClose,
   onError,
   onSuccess,
 }: {
   form: Form;
   products: Row[];
+  orders: { value: string; label: string }[];
   onClose: () => void;
   onError: (v: string) => void;
   onSuccess: () => void;
@@ -1947,6 +2143,7 @@ function FormModal({
       ),
     ),
     [items, setItems] = useState<any[]>(form.items || []),
+    [allocations, setAllocations] = useState(form.allocations || []),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   return (
@@ -1967,6 +2164,7 @@ function FormModal({
               await form.submit({
                 ...values,
                 ...(form.quote ? { items } : {}),
+                ...(form.allocations ? { allocations } : {}),
               });
               onSuccess();
             } catch (e) {
@@ -2022,6 +2220,81 @@ function FormModal({
                 </label>
               ))}
             </div>
+            {form.allocations && (
+              <div className="quote-lines">
+                <h3>按订单分配收款（同一客户、相同币种）</h3>
+                {allocations.map((a, i) => (
+                  <div className="quote-line" key={i}>
+                    <select
+                      aria-label="核销订单"
+                      value={a.order}
+                      onChange={(e) =>
+                        setAllocations(
+                          allocations.map((x, j) =>
+                            j === i ? { ...x, order: e.target.value } : x,
+                          ),
+                        )
+                      }
+                    >
+                      {orders.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                    <label>
+                      分配金额
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={a.amount}
+                        onChange={(e) =>
+                          setAllocations(
+                            allocations.map((x, j) =>
+                              j === i
+                                ? { ...x, amount: Number(e.target.value) }
+                                : x,
+                            ),
+                          )
+                        }
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      disabled={allocations.length === 1}
+                      onClick={() =>
+                        setAllocations(allocations.filter((_, j) => i !== j))
+                      }
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={() => {
+                    const o = orders.find(
+                      (o) => !allocations.some((a) => a.order === o.value),
+                    );
+                    if (o)
+                      setAllocations([
+                        ...allocations,
+                        { order: o.value, amount: 0 },
+                      ]);
+                  }}
+                >
+                  增加订单分配
+                </button>
+                <p className="section-gap muted">
+                  已分配{" "}
+                  {allocations.reduce((sum, a) => sum + a.amount, 0).toFixed(2)}
+                  ；分配总额不能超过本笔收款。
+                </p>
+              </div>
+            )}
             {form.quote && (
               <div className="quote-lines">
                 <h3>报价商品 / Quotation lines</h3>

@@ -1186,11 +1186,13 @@ footer span {
 @media (max-width: 760px) {
   .sidebar {
     transform: translateX(-100%);
+    visibility: hidden;
     transition: transform 0.2s;
     width: 230px;
   }
   .sidebar.mobile-open {
     transform: translateX(0);
+    visibility: visible;
   }
   main {
     margin: 0;
@@ -1331,6 +1333,9 @@ footer span {
   }
 }
 @media print {
+  .approval-log {
+    display: none;
+  }
   body {
     background: white;
   }

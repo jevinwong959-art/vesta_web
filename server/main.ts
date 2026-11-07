@@ -24,9 +24,10 @@ import express from "express";
 import { z, ZodError } from "zod";
 import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { randomBytes } from "node:crypto";
 import { pool, migrate, read, transaction, uid } from "./db";
 import { seed } from "./seed";
-import { authenticate, login, allow, digest, User } from "./auth";
+import { authenticate, login, allow, digest, hashPassword, User } from "./auth";
 import { action, listData, canCustomer, scanReminders } from "./domain";
 import { scheduledFx } from "./fx";
 import { templates, previewImport, commitImport } from "./imports";
@@ -169,6 +170,136 @@ class Api {
     @Req() req: Request,
   ) {
     return commitImport(await this.writeUser(req), id);
+  }
+  @Post("users") async createUser(@Body() b: unknown, @Req() req: Request) {
+    const u = await this.writeUser(req);
+    allow(u, ["admin"]);
+    const v = z
+      .object({
+        username: z.string().regex(/^[a-z][a-z0-9_-]{2,39}$/),
+        name: z.string().min(1).max(80),
+        role: z.enum(["sales", "customer", "finance", "warehouse"]),
+        customer: z.string().optional(),
+        password: z.string().min(10).max(128),
+      })
+      .parse(b);
+    return transaction(async (db) => {
+      if (
+        v.role === "customer" &&
+        (!v.customer || !(await db.get("customers", v.customer)))
+      )
+        throw new BadRequestException("请选择已存在的客户公司");
+      if (
+        (
+          await db.client.query("SELECT id FROM users WHERE username=$1", [
+            v.username,
+          ])
+        ).rowCount
+      )
+        throw new BadRequestException("账号已存在");
+      const id = uid("U");
+      await db.client.query(
+        "INSERT INTO users(id,username,name,role,customer,password) VALUES($1,$2,$3,$4,$5,$6)",
+        [
+          id,
+          v.username,
+          v.name,
+          v.role,
+          v.role === "customer" ? v.customer : null,
+          hashPassword(v.password),
+        ],
+      );
+      await db.put("mails", {
+        id: uid("MAIL"),
+        recipient: v.username,
+        subject: "Vesta 本地账号邀请",
+        body: `账号 ${v.username} 已创建，请向管理员领取初始密码后登录本地工作空间。`,
+        status: "captured",
+        channel: "local-only",
+        at: new Date().toISOString(),
+      });
+      await db.audit(u.id, "user-create", id);
+      return { id, username: v.username };
+    });
+  }
+  @Get("customer-directory") async customerDirectory(@Req() req: Request) {
+    const u = await authenticate(req.cookies.vesta_session);
+    allow(u, ["admin"]);
+    return read(async (db) =>
+      (await db.all("customers")).map((c) => ({ id: c.id, name: c.name })),
+    );
+  }
+  @Get("sales-directory") async salesDirectory(@Req() req: Request) {
+    const u = await authenticate(req.cookies.vesta_session);
+    allow(u, ["owner", "manager"]);
+    return (
+      await pool.query(
+        "SELECT id,name FROM users WHERE active=true AND role IN ('owner','manager','sales') ORDER BY name",
+      )
+    ).rows;
+  }
+  @Post("password/request") async requestReset(
+    @Body() b: unknown,
+    @Req() req: Request,
+  ) {
+    const v = z.object({ username: z.string().min(1).max(80) }).parse(b);
+    const key = "reset:" + req.ip;
+    const last = attempts.get(key);
+    if (last && Date.now() - last.at < 60000)
+      throw new HttpException("一分钟后再试", 429);
+    attempts.set(key, { n: 1, at: Date.now() });
+    await transaction(async (db) => {
+      const user = (
+        await db.client.query(
+          "SELECT id FROM users WHERE username=$1 AND active=true",
+          [v.username],
+        )
+      ).rows[0];
+      if (!user) return;
+      const token = randomBytes(32).toString("hex");
+      await db.put("resets", {
+        id: digest(token),
+        user: user.id,
+        expires: Date.now() + 15 * 60 * 1000,
+        used: false,
+      });
+      await db.put("mails", {
+        id: uid("MAIL"),
+        recipient: v.username,
+        subject: "本地密码恢复（15分钟有效）",
+        body: `http://127.0.0.1:${process.env.PORT || 3100}/?reset=${token}`,
+        sensitive: true,
+        status: "captured",
+        channel: "local-only",
+        at: new Date().toISOString(),
+      });
+    });
+    return {
+      message: "如账号有效，恢复链接已写入本地邮件捕获箱，请联系管理员查看。",
+    };
+  }
+  @Post("password/reset") async resetPassword(@Body() b: unknown) {
+    const v = z
+      .object({
+        token: z.string().regex(/^[a-f0-9]{64}$/),
+        password: z.string().min(10).max(128),
+      })
+      .parse(b);
+    return transaction(async (db) => {
+      const r = await db.get("resets", digest(v.token));
+      if (!r || r.used || r.expires < Date.now())
+        throw new BadRequestException("恢复链接无效或已过期");
+      await db.client.query("UPDATE users SET password=$1 WHERE id=$2", [
+        hashPassword(v.password),
+        r.user,
+      ]);
+      await db.client.query("DELETE FROM sessions WHERE user_id=$1", [r.user]);
+      for (const reset of await db.all("resets"))
+        if (reset.user === r.user && !reset.used)
+          await db.put("resets", { ...reset, used: true });
+      await db.audit(r.user, "password-reset", r.user);
+      return { ok: true };
+    });
   }
   @Post("users/:id/active") async active(
     @Param("id") id: string,

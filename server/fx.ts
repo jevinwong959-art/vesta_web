@@ -13,7 +13,9 @@ export const stale = (r: RecordData, now = new Date()) =>
 export async function latestRate(db: Store) {
   const rates = await db.all("rates");
   const automatic = rates
-    .filter((x) => !x.manual && !x.simulated)
+    .filter(
+      (x) => !x.manual && !x.simulated && !x.invalid && x.date <= chinaDay(),
+    )
     .sort((a, b) => b.fetchedAt.localeCompare(a.fetchedAt));
   return automatic[0] || rates.filter((x) => x.simulated).at(-1);
 }
@@ -40,7 +42,9 @@ async function fetchRate(actor: string) {
         raw.quote !== "CNY" ||
         !/^\d{4}-\d{2}-\d{2}$/.test(raw.date) ||
         !Number.isFinite(Number(raw.rate)) ||
-        Number(raw.rate) <= 0
+        Number(raw.rate) <= 0 ||
+        !Number.isFinite(Date.parse(raw.date)) ||
+        raw.date > chinaDay()
       )
         throw new Error("Invalid provider response");
       return await transaction(async (db) => {
@@ -101,7 +105,8 @@ export async function scheduledFx() {
   const status = await read((db) => db.get("settings", "fx-status"));
   if (status?.successSlot === scheduleSlot()) return;
   if (
-    status?.error && status?.checkedAt &&
+    status?.error &&
+    status?.checkedAt &&
     Date.now() - Date.parse(status.checkedAt) < 60 * 60 * 1000
   )
     return;

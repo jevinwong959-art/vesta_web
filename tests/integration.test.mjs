@@ -444,6 +444,165 @@ test("provider refresh deduplicates, versions corrections, preserves cache on fa
   }
 });
 
+test("new customer accounts, isolated profile updates and single-use password recovery", async () => {
+  await request(
+    "sales",
+    "users",
+    {
+      username: "new_buyer",
+      name: "New Buyer",
+      role: "customer",
+      customer: "C-001",
+      password: "NewDemo2026!",
+    },
+    403,
+  );
+  const created = await request(
+    "admin",
+    "users",
+    {
+      username: "new_buyer",
+      name: "New Buyer",
+      role: "customer",
+      customer: "C-001",
+      password: "NewDemo2026!",
+    },
+    201,
+  );
+  assert(created.id);
+  const r = await fetch(url + "login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "new_buyer", password: "NewDemo2026!" }),
+  });
+  assert.equal(r.status, 201);
+  users.new_buyer = {
+    ...(await r.json()),
+    cookie: r.headers.get("set-cookie").split(";")[0],
+  };
+  await act("new_buyer", "customer-profile", {
+    contact: "Updated Demo",
+    email: "new@example.test",
+    address: "New demo address",
+    phone: "123",
+  });
+  assert.equal(
+    (await request("new_buyer", "data/customers"))[0].contact,
+    "Updated Demo",
+  );
+  assert.equal(
+    (await request("buyer2", "data/customers"))[0].contact,
+    "Alex Smith",
+  );
+  await request(null, "password/request", { username: "new_buyer" }, 201);
+  const mail = (await request("admin", "data/mails")).find(
+    (m) => m.recipient === "new_buyer" && m.sensitive,
+  );
+  assert(mail);
+  assert(!(await request("manager", "data/mails")).some((m) => m.sensitive));
+  const token = new URL(mail.body).searchParams.get("reset");
+  await request(
+    null,
+    "password/reset",
+    { token, password: "ChangedDemo2026!" },
+    201,
+  );
+  await request("new_buyer", "me", undefined, 401);
+  await request(
+    null,
+    "password/reset",
+    { token, password: "AnotherDemo2026!" },
+    400,
+  );
+  await request(
+    null,
+    "login",
+    { username: "new_buyer", password: "NewDemo2026!" },
+    401,
+  );
+  await request(
+    null,
+    "login",
+    { username: "new_buyer", password: "ChangedDemo2026!" },
+    201,
+  );
+});
+
+test("one receipt allocates across orders and cancellation preserves original snapshots", async () => {
+  const createOrder = async () => {
+    const q = await act("sales", "quote-save", {
+      customer: "C-001",
+      currency: "CNY",
+      items: [{ product: "P-001", qty: 100, price: 48 }],
+      depositPct: 30,
+      valid: "2099-01-01",
+      eta: "2099-02-01",
+    });
+    await act("sales", "quote-submit", { id: q.id });
+    await act("manager", "quote-decide", {
+      id: q.id,
+      approve: true,
+      note: "checked",
+    });
+    await act("sales", "quote-publish", { id: q.id });
+    return act("buyer", "quote-accept", { id: q.id });
+  };
+  const a = await createOrder(),
+    b = await createOrder();
+  const r = await act("finance", "receipt-create", {
+    transaction: "SPLIT-TEST",
+    currency: "CNY",
+    amount: 2880,
+    allocations: [
+      { order: a.id, amount: 1440 },
+      { order: b.id, amount: 1440 },
+    ],
+    note: "split deposit",
+  });
+  await act("finance", "receipt-verify", { id: r.id });
+  const paid = await request("owner", "data/orders");
+  assert.equal(paid.find((o) => o.id === a.id).paid, 1440);
+  assert.equal(paid.find((o) => o.id === b.id).paid, 1440);
+  await act("warehouse", "order-release", { id: a.id });
+  await act("warehouse", "order-produce", {
+    id: a.id,
+    product: "P-001",
+    qty: 40,
+    key: randomUUID(),
+  });
+  await act(
+    "manager",
+    "order-cancel-remainder",
+    {
+      id: a.id,
+      product: "P-001",
+      qty: 61,
+      reason: "over cancellation",
+      key: randomUUID(),
+    },
+    400,
+  );
+  const payload = {
+    id: a.id,
+    product: "P-001",
+    qty: 60,
+    reason: "customer agrees to reduce unproduced quantity",
+    key: randomUUID(),
+  };
+  const amended = await act("manager", "order-cancel-remainder", payload);
+  await act("manager", "order-cancel-remainder", payload);
+  assert.equal(amended.total, 1920);
+  assert.equal(amended.originalTotal, 4800);
+  assert.equal(amended.originalItems[0].qty, 100);
+  assert.equal(amended.items[0].qty, 40);
+  await act(
+    "warehouse",
+    "order-produce",
+    { id: a.id, product: "P-001", qty: 1, key: randomUUID() },
+    400,
+  );
+});
+
 test("API process restart retains business records and sessions", async () => {
   const records = await request("owner", "data/orders");
   const exited = new Promise((r) => processApi.once("exit", r));
