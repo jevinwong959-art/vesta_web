@@ -1,5 +1,5 @@
-import { PricingNote, displayCurrency } from "./pricing";
-import { businessDay, businessNow } from "./clock";
+import { PricingNote } from "./pricing";
+import { businessDay } from "./clock";
 import React, { useState, useEffect, useRef } from "react";
 import { X, Plus, Search } from "lucide-react";
 import { orderStage, fmt } from "./workspace";
@@ -66,26 +66,31 @@ export function Dialog({
   children,
   footer,
   wide = true,
+  closeDisabled = false,
 }: {
   title: string;
   onClose: () => void;
   children: React.ReactNode;
   footer?: React.ReactNode;
   wide?: boolean;
+  closeDisabled?: boolean;
 }) {
   const ref = useRef<HTMLElement>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  const closeLabel = document.documentElement.lang === "en" ? "Close" : "关闭";
   useEffect(() => {
     const prior = document.activeElement as HTMLElement;
     ref.current?.focus();
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.stopPropagation();
-        onClose();
+        closeRef.current();
       }
       if (e.key === "Tab") {
         const els = Array.from(
           ref.current?.querySelectorAll<HTMLElement>(
-            'button:not(:disabled),input,select,textarea,a[href],[tabindex="0"]',
+            'button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href],summary,[tabindex="0"]',
           ) || [],
         ).filter((e) => e.offsetParent !== null);
         const first = els[0],
@@ -119,7 +124,8 @@ export function Dialog({
           <h2>{title}</h2>
           <button
             className="icon-btn"
-            aria-label="关闭 / Close"
+            aria-label={closeLabel}
+            disabled={closeDisabled}
             onClick={onClose}
           >
             <X />
@@ -127,8 +133,8 @@ export function Dialog({
         </div>
         <div className="modal-body">{children}</div>
         <div className="modal-actions">
-          <button className="btn" onClick={onClose}>
-            关闭 / Close
+          <button className="btn" onClick={onClose} disabled={closeDisabled}>
+            {closeLabel}
           </button>
           {footer}
         </div>
@@ -590,12 +596,25 @@ export function QuoteDocument({
   );
 }
 
+export type RequestDraft = {
+  customer: string;
+  currency: string;
+  type: string;
+  eta: string;
+  address: string;
+  note: string;
+};
+
 export function RequestDialog({
   products,
   customers,
   portal,
   en,
-  initial,
+  items,
+  setItems,
+  draft,
+  onChange,
+  onDiscard,
   onClose,
   submit,
 }: {
@@ -603,52 +622,70 @@ export function RequestDialog({
   customers: Row[];
   portal: boolean;
   en: boolean;
-  initial: any[];
+  items: any[];
+  setItems: (items: any[]) => void;
+  draft: RequestDraft;
+  onChange: (draft: RequestDraft) => void;
+  onDiscard: () => void;
   onClose: () => void;
   submit: (v: any) => Promise<any>;
 }) {
   const T = (a: string, b: string) => (en ? b : a);
-  const [items, setItems] = useState(
-      initial.length
-        ? initial
-        : products[0]
-          ? [{ product: products[0].id, qty: products[0].moq }]
-          : [],
-    ),
-    [customer, setCustomer] = useState(customers[0]?.id || ""),
-    [currency, setCurrency] = useState(displayCurrency(en)),
-    [error, setError] = useState(""),
+  const { customer, currency } = draft;
+  const [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
+  const update = (key: keyof RequestDraft, value: string) =>
+    onChange({ ...draft, [key]: value });
   return (
     <Dialog
       title={T("提交采购需求", "Submit purchase request")}
-      onClose={onClose}
+      closeDisabled={busy}
+      onClose={() => {
+        if (!busy) onClose();
+      }}
       footer={
-        <button
-          form="purchase-request"
-          className="btn primary"
-          disabled={busy || !items.length}
-        >
-          {T("提交申请", "Submit request")}
-        </button>
+        <>
+          <button
+            type="button"
+            className="btn"
+            disabled={busy}
+            onClick={() => {
+              if (
+                window.confirm(
+                  T(
+                    "清空草稿及需求清单？此操作无法撤销。",
+                    "Discard this draft and basket? This cannot be undone.",
+                  ),
+                )
+              )
+                onDiscard();
+            }}
+          >
+            {T("清空草稿", "Discard draft")}
+          </button>
+          <button
+            form="purchase-request"
+            className="btn primary"
+            disabled={busy || !items.length}
+          >
+            {busy
+              ? T("正在提交…", "Submitting…")
+              : T("提交申请", "Submit request")}
+          </button>
+        </>
       }
     >
       <form
         id="purchase-request"
         onSubmit={async (e) => {
           e.preventDefault();
+          if (busy) return;
           setBusy(true);
           setError("");
-          const f = new FormData(e.currentTarget);
           try {
             await submit({
-              customer,
+              ...draft,
               items,
-              type: f.get("type"),
-              currency,
-              address: f.get("address"),
-              eta: f.get("eta"),
-              note: f.get("note"),
             });
             onClose();
           } catch (e) {
@@ -658,170 +695,206 @@ export function RequestDialog({
           }
         }}
       >
-        <PricingNote product={products[0]} en={en} />
-        <div className="notice-box">
-          {T(
-            "申请不是正式订单；确认已审批并发布的报价后才生成订单。",
-            "A request is not an order. Accept an approved, published quotation to create an order.",
-          )}
-        </div>
-        <div className="form-grid">
-          {!portal && (
+        <fieldset disabled={busy} className="request-fields">
+          <PricingNote product={products[0]} en={en} />
+          <div className="notice-box">
+            {T(
+              "申请不是正式订单；确认已审批并发布的报价后才生成订单。",
+              "A request is not an order. Accept an approved, published quotation to create an order.",
+            )}
+          </div>
+          <p className="muted draft-hint">
+            {T(
+              "关闭后保留本次页面会话的草稿；刷新页面或退出账号会清空。",
+              "Closing keeps this draft for this page session. Refreshing or signing out clears it.",
+            )}
+          </p>
+          <div className="form-grid">
+            {!portal && (
+              <label>
+                {T("客户", "Customer")}
+                <select
+                  value={customer}
+                  onChange={(e) => {
+                    onChange({
+                      ...draft,
+                      customer: e.target.value,
+                      address:
+                        customers.find((c) => c.id === e.target.value)
+                          ?.address || "",
+                    });
+                  }}
+                >
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label>
-              {T("客户", "Customer")}
+              {T("申请类型", "Request type")}
               <select
-                value={customer}
-                onChange={(e) => {
-                  setCustomer(e.target.value);
-                }}
+                name="type"
+                value={draft.type}
+                onChange={(e) => update("type", e.target.value)}
+                aria-describedby="request-type-help"
               >
-                {customers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
+                <option value="inquiry">{T("询价", "Inquiry")}</option>
+                <option value="order_request">
+                  {T("订单申请", "Order request")}
+                </option>
+              </select>
+              <small id="request-type-help">
+                {draft.type === "inquiry"
+                  ? T(
+                      "尚在比较方案，先获取价格与交期。",
+                      "Compare options and ask for pricing and lead times.",
+                    )
+                  : T(
+                      "已有采购计划，提交具体数量与交付要求供销售确认。",
+                      "Share planned quantities and delivery needs for sales to confirm.",
+                    )}
+              </small>
+            </label>
+            <label>
+              {T("币种", "Currency")}
+              <select
+                value={currency}
+                onChange={(e) => update("currency", e.target.value)}
+              >
+                <option>CNY</option>
+                <option>USD</option>
               </select>
             </label>
-          )}
-          <label>
-            {T("申请类型", "Request type")}
-            <select name="type">
-              <option value="inquiry">{T("询价", "Inquiry")}</option>
-              <option value="order_request">
-                {T("订单申请", "Order request")}
-              </option>
-            </select>
-          </label>
-          <label>
-            {T("币种", "Currency")}
-            <select
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value)}
-            >
-              <option>CNY</option>
-              <option>USD</option>
-            </select>
-          </label>
-          <label>
-            {T("期望交期", "Requested delivery")}
-            <input
-              name="eta"
-              type="date"
-              required
-              defaultValue={new Date(businessNow().getTime() + 30 * 86400000)
-                .toISOString()
-                .slice(0, 10)}
-            />
-          </label>
-          <label className="full">
-            {T("收货地址", "Delivery address")}
-            <input
-              key={customer}
-              name="address"
-              required
-              defaultValue={
-                customers.find((c) => c.id === customer)?.address || ""
-              }
-            />
-          </label>
-        </div>
-        <h3>{T("商品清单", "Requested products")}</h3>
-        {items.map((i, index) => {
-          const p = products.find((p) => p.id === i.product);
-          return (
-            <div className="request-line" key={index}>
-              <select
-                aria-label="商品 / Product"
-                value={i.product}
-                onChange={(e) => {
-                  const p = products.find((p) => p.id === e.target.value)!;
-                  setItems(
-                    items.map((v, n) =>
-                      n === index ? { product: p.id, qty: p.moq } : v,
-                    ),
-                  );
-                }}
-              >
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.sku} · {en ? p.en : p.name}
-                  </option>
-                ))}
-              </select>
-              <label>
-                {T("数量", "Quantity")} · MOQ {p?.moq}
-                <input
-                  type="number"
-                  min={p?.moq || 1}
-                  step="1"
-                  required
-                  value={i.qty}
-                  onChange={(e) =>
+            <label>
+              {T("期望交期", "Requested delivery")}
+              <input
+                name="eta"
+                type="date"
+                required
+                value={draft.eta}
+                onChange={(e) => update("eta", e.target.value)}
+              />
+            </label>
+            <label className="full">
+              {T("收货地址", "Delivery address")}
+              <input
+                name="address"
+                required
+                value={draft.address}
+                onChange={(e) => update("address", e.target.value)}
+              />
+            </label>
+          </div>
+          <h3>{T("商品清单", "Requested products")}</h3>
+          {items.map((i, index) => {
+            const p = products.find((p) => p.id === i.product);
+            return (
+              <div className="request-line" key={index}>
+                <select
+                  aria-label={T("商品", "Product")}
+                  value={i.product}
+                  onChange={(e) => {
+                    const p = products.find((p) => p.id === e.target.value)!;
                     setItems(
                       items.map((v, n) =>
-                        n === index ? { ...v, qty: Number(e.target.value) } : v,
+                        n === index ? { product: p.id, qty: p.moq } : v,
                       ),
-                    )
-                  }
-                />
-              </label>
-              <span>
-                {fmt(
-                  currency === "USD" && p?.usd == null
-                    ? null
-                    : i.qty * (currency === "USD" ? p?.usd : p?.price),
-                  currency,
-                )}
-              </span>
-              <button
-                type="button"
-                className="icon-btn"
-                aria-label="移除商品 / Remove"
-                onClick={() => setItems(items.filter((_, n) => n !== index))}
-              >
-                <X size={16} />
-              </button>
-            </div>
-          );
-        })}
-        <button
-          type="button"
-          className="btn"
-          onClick={() => {
-            const p = products.find(
-              (p) => !items.some((i) => i.product === p.id),
+                    );
+                  }}
+                >
+                  {products.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.sku} · {en ? p.en : p.name}
+                    </option>
+                  ))}
+                </select>
+                <label>
+                  {T("数量 · 起订量", "Quantity · MOQ")} {p?.moq}
+                  <input
+                    type="number"
+                    min={p?.moq || 1}
+                    step="1"
+                    required
+                    value={i.qty}
+                    onChange={(e) =>
+                      setItems(
+                        items.map((v, n) =>
+                          n === index
+                            ? { ...v, qty: Number(e.target.value) }
+                            : v,
+                        ),
+                      )
+                    }
+                  />
+                </label>
+                <span>
+                  {fmt(
+                    currency === "USD" && p?.usd == null
+                      ? null
+                      : i.qty * (currency === "USD" ? p?.usd : p?.price),
+                    currency,
+                  )}
+                </span>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label={T("移除商品", "Remove product")}
+                  onClick={() => setItems(items.filter((_, n) => n !== index))}
+                >
+                  <X size={16} />
+                </button>
+              </div>
             );
-            if (p) setItems([...items, { product: p.id, qty: p.moq }]);
-          }}
-        >
-          <Plus size={16} />
-          {T("增加商品", "Add product")}
-        </button>
-        <p>
-          {T(
-            "参考合计（以正式报价为准）",
-            "Reference total (subject to quotation)",
-          )}
-          :{" "}
-          {fmt(
-            currency === "USD" && !products[0]?.pricingFx
-              ? null
-              : items.reduce((s, i) => {
-                  const p = products.find((p) => p.id === i.product);
-                  return s + i.qty * (currency === "USD" ? p?.usd : p?.price);
-                }, 0),
-            currency,
-          )}
-        </p>
-        <label>
-          {T("包装、定制及其他要求", "Packaging, customization & notes")}
-          <textarea name="note" />
-        </label>
-        {error && (
-          <p role="alert" className="error">
-            {error}
+          })}
+          <button
+            type="button"
+            className="btn"
+            disabled={
+              !products.some((p) => !items.some((i) => i.product === p.id))
+            }
+            onClick={() => {
+              const p = products.find(
+                (p) => !items.some((i) => i.product === p.id),
+              );
+              if (p) setItems([...items, { product: p.id, qty: p.moq }]);
+            }}
+          >
+            <Plus size={16} />
+            {T("增加商品", "Add product")}
+          </button>
+          <p>
+            {T(
+              "参考合计（以正式报价为准）",
+              "Reference total (subject to quotation)",
+            )}
+            :{" "}
+            {fmt(
+              currency === "USD" && !products[0]?.pricingFx
+                ? null
+                : items.reduce((s, i) => {
+                    const p = products.find((p) => p.id === i.product);
+                    return s + i.qty * (currency === "USD" ? p?.usd : p?.price);
+                  }, 0),
+              currency,
+            )}
           </p>
-        )}
+          <label>
+            {T("包装、定制及其他要求", "Packaging, customization & notes")}
+            <textarea
+              name="note"
+              value={draft.note}
+              onChange={(e) => update("note", e.target.value)}
+            />
+          </label>
+          {error && (
+            <p role="alert" className="error">
+              {error}
+            </p>
+          )}
+        </fieldset>
       </form>
     </Dialog>
   );

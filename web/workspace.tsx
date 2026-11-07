@@ -9,27 +9,72 @@ import {
   FileText,
   Wallet,
   Truck,
-  Bell,
 } from "lucide-react";
 type Row = { id: string; [key: string]: any };
 type Data = Record<string, Row[]>;
+export const notificationTitle = (n: Row, en = false) => {
+  const parts = String(n.title || "").split(" / ");
+  return en ? parts[1] || parts[0] : parts[0];
+};
+export function notificationEntity(n: Row, data: Data, en = false) {
+  const c = (data.customers || []).find(
+    (c) => c.id === (n.customer || n.entity),
+  );
+  const name = c ? (en ? c.en || c.name : c.name) : "";
+  return n.entity === c?.id
+    ? name
+    : [name, n.entity].filter(Boolean).join(" · ");
+}
 export function PortalHome({
   data,
   en,
   onGo,
+  compact = false,
 }: {
   data: Data;
   en: boolean;
   onGo: (p: string) => void;
+  compact?: boolean;
 }) {
   const T = (zh: string, eng: string) => (en ? eng : zh),
     c = data.customers?.[0],
     orders = (data.orders || []).filter((o) => o.status !== "cancelled"),
     quotes = (data.quotes || []).filter((q) => q.status === "approved");
+  if (compact)
+    return (
+      <details className="portal-account">
+        <summary>
+          {en ? c?.en || c?.name : c?.name} · {quotes.length}{" "}
+          {T("份可确认报价", "open quotes")}
+        </summary>
+        <p>
+          {T("专属业务", "Your contact")}: {c?.assignedContact?.name || "—"} ·{" "}
+          {c?.currency}
+        </p>
+        <p>
+          {T(
+            "挑选商品并提交需求，专属销售跟进报价。申请不是正式订单，确认已发布报价后才生成订单。",
+            "Choose products and send your requirements to your sales contact. A request is not an order; accept a published quotation to create one.",
+          )}
+        </p>
+        <div className="actions">
+          <button className="btn" onClick={() => onGo("quotes")}>
+            {T("查看报价", "View quotes")} ({quotes.length})
+          </button>
+          <button className="btn" onClick={() => onGo("orders")}>
+            {T("履约中订单", "Active orders")} (
+            {orders.filter((o) => o.status === "confirmed").length})
+          </button>
+          <button className="btn" onClick={() => onGo("orders")}>
+            {T("已完成合作", "Completed")} (
+            {orders.filter((o) => o.status === "completed").length})
+          </button>
+        </div>
+      </details>
+    );
   return (
     <section className="portal-welcome">
       <div>
-        <small className="eyebrow">VESTA / SOURCING</small>
         <h2>{T("采购，从一份清单开始。", "Your next order starts here.")}</h2>
         <p>
           {T(
@@ -144,12 +189,14 @@ export function Stats({
 export function GridTable({
   heads,
   body,
+  mobileCards = false,
 }: {
   heads: string[];
   body: React.ReactNode[][];
+  mobileCards?: boolean;
 }) {
   return (
-    <div className="table-scroll">
+    <div className={"table-scroll" + (mobileCards ? " mobile-records" : "")}>
       <table>
         <thead>
           <tr>
@@ -162,7 +209,9 @@ export function GridTable({
           {body.map((r, i) => (
             <tr key={i}>
               {r.map((c, j) => (
-                <td key={j}>{c}</td>
+                <td key={j} data-label={heads[j]}>
+                  {c}
+                </td>
               ))}
             </tr>
           ))}
@@ -320,6 +369,7 @@ export function Customers({
           </button>
         </div>
         <GridTable
+          mobileCards
           heads={[
             "客户名称 / 地区",
             "联系人",
@@ -571,11 +621,13 @@ export function Overview({
   data,
   onGo,
   onOrder,
+  onTask,
   en = false,
 }: {
   data: Data;
   onGo: (s: string) => void;
   onOrder: (o: Row) => void;
+  onTask: (n: Row) => void;
   en?: boolean;
 }) {
   const [currency, setCurrency] = useState("CNY"),
@@ -776,16 +828,25 @@ export function Overview({
         <section className="card">
           <div className="card-head">
             <h2>{T("优先处理", "Priority tasks")}</h2>
-            <Bell size={18} />
+            <button className="link" onClick={() => onGo("notifications")}>
+              {T("全部待办", "All tasks")} →
+            </button>
           </div>
           <div className="priority-tasks">
             {tasks.slice(0, 4).map((n) => (
-              <button key={n.id} onClick={() => onGo("notifications")}>
+              <button key={n.id} onClick={() => onTask(n)}>
                 <Clock size={18} />
                 <div>
-                  <strong>{n.title}</strong>
+                  <strong>
+                    {notificationTitle(n, en)} ·{" "}
+                    {notificationEntity(n, data, en)}
+                  </strong>
                   <small>
-                    {n.entity} · {date(n.due)}
+                    {n.due &&
+                      (new Date(n.due).getTime() < businessNow().getTime()
+                        ? T("已到期", "Overdue")
+                        : T("到期", "Due"))}{" "}
+                    {date(n.due)}
                   </small>
                 </div>
               </button>
@@ -806,6 +867,7 @@ export function Overview({
           </button>
         </div>
         <GridTable
+          mobileCards
           heads={[
             T("订单 / 客户", "Order / Customer"),
             T("履约状态", "Fulfillment"),

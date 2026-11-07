@@ -57,7 +57,7 @@ export function ModalAccess() {
       if (e.key !== "Tab") return;
       const elements = Array.from(
           top.querySelectorAll<HTMLElement>(
-            "button:not(:disabled),a[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled)",
+            "button:not(:disabled),a[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled),summary",
           ),
         ).filter((e) => e.offsetParent !== null),
         first = elements[0],

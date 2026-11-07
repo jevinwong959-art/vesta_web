@@ -38,6 +38,7 @@ import {
   BusinessDetail,
   QuoteDocument,
   RequestDialog,
+  type RequestDraft,
   Dialog,
   Table as ParityTable,
   KV,
@@ -50,6 +51,8 @@ import {
   PortalHome,
   Stats,
   orderStage,
+  notificationTitle,
+  notificationEntity,
 } from "./workspace";
 
 type Row = { id: string; [key: string]: any };
@@ -63,6 +66,7 @@ type User = {
 type Field = {
   key: string;
   label: string;
+  section?: string;
   type?: string;
   options?: { value: string; label: string }[];
   value?: any;
@@ -198,7 +202,8 @@ function App() {
     [importKind, setImportKind] = useState<string | null>(null),
     [detail, setDetail] = useState<Row | null>(null),
     [mobile, setMobile] = useState(false),
-    [requestItems, setRequestItems] = useState<any[] | null>(null),
+    [requestOpen, setRequestOpen] = useState(false),
+    [requestDraft, setRequestDraft] = useState<RequestDraft | null>(null),
     [basket, setBasket] = useState<any[]>([]),
     [aux, setAux] = useState<{ kind: string; row: Row } | null>(null),
     [printQuote, setPrintQuote] = useState<Row | null>(null),
@@ -221,6 +226,11 @@ function App() {
   useEffect(() => {
     document.documentElement.lang = user && en ? "en" : "zh-CN";
   }, [user, en]);
+  useEffect(() => {
+    setRequestOpen(false);
+    setRequestDraft(null);
+    setBasket([]);
+  }, [user?.id]);
   async function api(path: string, body?: any) {
     const r = await fetch("/api/v1/" + path, {
       method: body === undefined ? "GET" : "POST",
@@ -397,46 +407,85 @@ function App() {
     openForm(
       T("客户档案", "Customer profile"),
       [
-        { key: "name", label: "公司名称", value: c?.name },
-        { key: "en", label: "Company name (English)", value: c?.en },
-        { key: "country", label: "国家 / Region", value: c?.country },
+        {
+          key: "name",
+          label: T("公司名称", "Company name"),
+          section: T("公司资料", "Company details"),
+          value: c?.name,
+        },
+        {
+          key: "en",
+          label: T("公司英文名", "Company name (English)"),
+          value: c?.en,
+        },
+        {
+          key: "country",
+          label: T("国家 / 地区", "Country / Region"),
+          value: c?.country,
+        },
         {
           key: "industry",
-          label: "行业",
+          label: T("行业", "Industry"),
           value: c?.industry || "",
           required: false,
         },
         {
           key: "tier",
-          label: "客户分级",
+          label: T("客户分级", "Customer tier"),
           value: c?.tier || "B",
           options: [
-            { value: "A", label: "A · 重点客户" },
-            { value: "B", label: "B · 成长客户" },
-            { value: "C", label: "C · 普通客户" },
+            { value: "A", label: T("A · 重点客户", "A · Key account") },
+            { value: "B", label: T("B · 成长客户", "B · Growth account") },
+            { value: "C", label: T("C · 普通客户", "C · Standard account") },
           ],
         },
-        { key: "phone", label: "电话", value: c?.phone || "", required: false },
         {
           key: "tags",
-          label: "客户标签（逗号分隔）",
+          label: T("客户标签（逗号分隔）", "Tags (comma separated)"),
           value: (c?.tags || []).join("，"),
           required: false,
         },
         {
           key: "since",
-          label: "建档日期",
+          label: T("建档日期", "Account since"),
           type: "date",
           value: c?.since || c?.createdAt?.slice(0, 10) || today(),
         },
-        { key: "contact", label: "联系人 / Contact", value: c?.contact },
-        { key: "email", label: "Email", type: "email", value: c?.email },
-        { key: "address", label: "地址 / Address", value: c?.address },
+        {
+          key: "contact",
+          label: T("联系人", "Contact"),
+          section: T("联系信息", "Contact details"),
+          value: c?.contact,
+        },
+        {
+          key: "email",
+          label: T("电子邮箱", "Email"),
+          type: "email",
+          value: c?.email,
+        },
+        {
+          key: "phone",
+          label: T("电话", "Phone"),
+          value: c?.phone || "",
+          required: false,
+        },
+        {
+          key: "address",
+          label: T("收货地址", "Delivery address"),
+          value: c?.address,
+        },
+        {
+          key: "currency",
+          section: T("交易与负责人员", "Trade & account ownership"),
+          label: T("约定币种", "Agreed currency"),
+          options: ["USD", "CNY"].map((v) => ({ value: v, label: v })),
+          value: c?.currency,
+        },
         ...(["owner", "manager"].includes(user?.role || "")
           ? [
               {
                 key: "owner",
-                label: "业务负责人",
+                label: T("业务负责人", "Account owner"),
                 options: rows("salesDirectory").map((s) => ({
                   value: s.id,
                   label: s.name,
@@ -445,12 +494,6 @@ function App() {
               },
             ]
           : []),
-        {
-          key: "currency",
-          label: "币种 / Currency",
-          options: ["USD", "CNY"].map((v) => ({ value: v, label: v })),
-          value: c?.currency,
-        },
       ],
       "customer-save",
       c ? { id: c.id } : {},
@@ -512,7 +555,35 @@ function App() {
     );
   }
   function inquiry(p?: Row) {
-    setRequestItems(p ? [{ product: p.id, qty: p.moq }] : basket);
+    if (p && !basket.some((i) => i.product === p.id))
+      setBasket([...basket, { product: p.id, qty: p.moq }]);
+    else if (!basket.length && !requestDraft && rows("products")[0]) {
+      const first = rows("products")[0];
+      setBasket([{ product: first.id, qty: first.moq }]);
+    }
+    if (!requestDraft)
+      setRequestDraft({
+        customer: rows("customers")[0]?.id || "",
+        currency: displayCurrency(en),
+        type: "inquiry",
+        eta: future(),
+        address: rows("customers")[0]?.address || "",
+        note: "",
+      });
+    setRequestOpen(true);
+  }
+  function openTask(n: Row) {
+    for (const kind of ["customers", "orders", "quotes"]) {
+      const row = rows(kind).find((r) => r.id === n.entity);
+      if (!row) continue;
+      if (kind === "customers") {
+        go(kind);
+        setQuery(row.id);
+      } else setDetail({ ...row, detailKind: kind });
+      return;
+    }
+    go("notifications");
+    setQuery(n.entity || "");
   }
   function quote(q?: Row, source?: Row) {
     setDetail(null);
@@ -1084,7 +1155,9 @@ function App() {
           {body.map((r, i) => (
             <tr key={i}>
               {r.map((c, j) => (
-                <td key={j}>{c}</td>
+                <td key={j} data-label={heads[j]}>
+                  {c}
+                </td>
               ))}
             </tr>
           ))}
@@ -1294,129 +1367,138 @@ function App() {
           </div>
         </header>
         <div className="content" id="workspace-content" tabIndex={-1}>
-          <div className="page-heading">
-            <div>
-              <div className="eyebrow">
-                VESTA / {portal ? "CUSTOMER EXPERIENCE" : "SALES OPERATIONS"}
+          {!(portal && page === "products") && (
+            <div className="page-heading">
+              <div>
+                <div className="eyebrow">
+                  VESTA / {portal ? "CUSTOMER EXPERIENCE" : "SALES OPERATIONS"}
+                </div>
+                <h1>
+                  {portal
+                    ? T(...portalTitles[page])
+                    : T(title?.[1] || "", title?.[2] || "")}
+                </h1>
+                <p>
+                  {T(
+                    (portal
+                      ? "浏览产品、提交询价、确认报价，跟踪您公司的订单与交付。"
+                      : pageDescriptions[page]) ||
+                      "从每一次询价，到每一份如期交付。",
+                    "From the first inquiry to every delivery on time.",
+                  )}
+                </p>
               </div>
-              <h1>
-                {portal
-                  ? T(...portalTitles[page])
-                  : T(title?.[1] || "", title?.[2] || "")}
-              </h1>
-              <p>
-                {T(
-                  (portal
-                    ? "浏览产品、提交询价、确认报价，跟踪您公司的订单与交付。"
-                    : pageDescriptions[page]) ||
-                    "从每一次询价，到每一份如期交付。",
-                  "From the first inquiry to every delivery on time.",
-                )}
-              </p>
+              <div className="heading-actions">
+                {page === "settings" &&
+                  user.role === "owner" &&
+                  btn(
+                    "+ 创建账号",
+                    () =>
+                      setForm({
+                        title: "创建本地账号",
+                        fields: [
+                          {
+                            key: "username",
+                            label: "登录账号（小写字母开头）",
+                          },
+                          { key: "name", label: "显示姓名" },
+                          {
+                            key: "role",
+                            label: "角色",
+                            options: [
+                              { value: "sales", label: "销售" },
+                              { value: "customer", label: "客户门户" },
+                              { value: "owner", label: "管理" },
+                              { value: "manager", label: "经理" },
+                            ],
+                          },
+                          {
+                            key: "customer",
+                            label: "关联客户公司（客户账号必选）",
+                            required: false,
+                            options: [
+                              { value: "", label: "员工账号无需选择" },
+                              ...rows("customerDirectory").map((c) => ({
+                                value: c.id,
+                                label: c.name,
+                              })),
+                            ],
+                          },
+                          {
+                            key: "password",
+                            label: "初始密码（至少10位）",
+                            type: "password",
+                            value: "VestaDemo2026!",
+                          },
+                        ],
+                        submit: async (v) => {
+                          const r = await api("users", v);
+                          await load();
+                          setNotice("账号已创建，本地邀请已捕获");
+                          return r;
+                        },
+                      }),
+                    true,
+                  )}
+                {portal &&
+                  page === "profile" &&
+                  btn(T("修改联系资料", "Edit contact details"), () => {
+                    const c = rows("customers")[0];
+                    if (c)
+                      openForm(
+                        T("联系资料", "Contact details"),
+                        [
+                          {
+                            key: "contact",
+                            label: "联系人 / Contact",
+                            value: c.contact,
+                          },
+                          {
+                            key: "email",
+                            label: "Email",
+                            type: "email",
+                            value: c.email,
+                          },
+                          {
+                            key: "address",
+                            label: "地址 / Address",
+                            value: c.address,
+                          },
+                          {
+                            key: "phone",
+                            label: "电话 / Phone",
+                            value: c.phone || "",
+                            required: false,
+                          },
+                        ],
+                        "customer-profile",
+                      );
+                  })}
+                {page === "customers" &&
+                  sales &&
+                  btn("+ 新增客户", () => createCustomer(), true)}
+                {page === "products" &&
+                  ["owner", "manager"].includes(user.role) &&
+                  btn("+ 新增产品", () => createProduct(), true)}
+                {page === "inquiries" &&
+                  (sales || portal) &&
+                  btn(T("+ 新建询价", "+ New request"), () => inquiry(), true)}
+                {(detail?.detailKind || page) === "quotes" &&
+                  sales &&
+                  btn("+ 新建报价", () => quote(), true)}
+                {page === "receipts" &&
+                  (sales || finance) &&
+                  btn("+ 登记回款", () => receipt(), true)}
+                {page === "rates" &&
+                  finance &&
+                  btn(
+                    "立即查询参考汇率",
+                    () => perform("fx-refresh", {}),
+                    true,
+                  )}
+              </div>
             </div>
-            <div className="heading-actions">
-              {page === "settings" &&
-                user.role === "owner" &&
-                btn(
-                  "+ 创建账号",
-                  () =>
-                    setForm({
-                      title: "创建本地账号",
-                      fields: [
-                        { key: "username", label: "登录账号（小写字母开头）" },
-                        { key: "name", label: "显示姓名" },
-                        {
-                          key: "role",
-                          label: "角色",
-                          options: [
-                            { value: "sales", label: "销售" },
-                            { value: "customer", label: "客户门户" },
-                            { value: "owner", label: "管理" },
-                            { value: "manager", label: "经理" },
-                          ],
-                        },
-                        {
-                          key: "customer",
-                          label: "关联客户公司（客户账号必选）",
-                          required: false,
-                          options: [
-                            { value: "", label: "员工账号无需选择" },
-                            ...rows("customerDirectory").map((c) => ({
-                              value: c.id,
-                              label: c.name,
-                            })),
-                          ],
-                        },
-                        {
-                          key: "password",
-                          label: "初始密码（至少10位）",
-                          type: "password",
-                          value: "VestaDemo2026!",
-                        },
-                      ],
-                      submit: async (v) => {
-                        const r = await api("users", v);
-                        await load();
-                        setNotice("账号已创建，本地邀请已捕获");
-                        return r;
-                      },
-                    }),
-                  true,
-                )}
-              {portal &&
-                page === "profile" &&
-                btn(T("修改联系资料", "Edit contact details"), () => {
-                  const c = rows("customers")[0];
-                  if (c)
-                    openForm(
-                      T("联系资料", "Contact details"),
-                      [
-                        {
-                          key: "contact",
-                          label: "联系人 / Contact",
-                          value: c.contact,
-                        },
-                        {
-                          key: "email",
-                          label: "Email",
-                          type: "email",
-                          value: c.email,
-                        },
-                        {
-                          key: "address",
-                          label: "地址 / Address",
-                          value: c.address,
-                        },
-                        {
-                          key: "phone",
-                          label: "电话 / Phone",
-                          value: c.phone || "",
-                          required: false,
-                        },
-                      ],
-                      "customer-profile",
-                    );
-                })}
-              {page === "customers" &&
-                sales &&
-                btn("+ 新增客户", () => createCustomer(), true)}
-              {page === "products" &&
-                ["owner", "manager"].includes(user.role) &&
-                btn("+ 新增产品", () => createProduct(), true)}
-              {page === "inquiries" &&
-                (sales || portal) &&
-                btn(T("+ 新建询价", "+ New request"), () => inquiry(), true)}
-              {(detail?.detailKind || page) === "quotes" &&
-                sales &&
-                btn("+ 新建报价", () => quote(), true)}
-              {page === "receipts" &&
-                (sales || finance) &&
-                btn("+ 登记回款", () => receipt(), true)}
-              {page === "rates" &&
-                finance &&
-                btn("立即查询参考汇率", () => perform("fx-refresh", {}), true)}
-            </div>
-          </div>
+          )}
           {error && (
             <div role="alert" className="alert error">
               <span>{error}</span>
@@ -1442,6 +1524,7 @@ function App() {
               data={data}
               en={en}
               onGo={go}
+              onTask={openTask}
               onOrder={(o) => {
                 setDetail({ ...o, detailKind: "orders" });
               }}
@@ -1455,7 +1538,11 @@ function App() {
             !["data", "profile", "notifications", "receipts"].includes(
               page,
             ) && (
-              <div className="toolbar">
+              <div
+                className={
+                  "toolbar" + (page === "orders" ? " order-toolbar" : "")
+                }
+              >
                 <div className="search">
                   <Search size={16} />
                   <input
@@ -1619,7 +1706,7 @@ function App() {
             </section>
           )}
           {page === "products" && portal && (
-            <PortalHome data={data} en={en} onGo={go} />
+            <PortalHome data={data} en={en} onGo={go} compact />
           )}
           {page === "products" && portal && (
             <>
@@ -1629,7 +1716,7 @@ function App() {
                 tabIndex={-1}
               >
                 <div>
-                  <h2>{T("产品精选", "Explore our collection")}</h2>
+                  <h1>{T("产品目录", "Products")}</h1>
                   <p className="muted">
                     {T(
                       "登录客户参考价 · 正式价格以审批后的报价为准",
@@ -1688,14 +1775,22 @@ function App() {
                   </div>
                   <div className="product-info">
                     <small>{categoryLabel(p.category, en)}</small>
-                    <h3>{en ? p.en : p.name}</h3>
+                    <h2>{en ? p.en : p.name}</h2>
                     <p>{en ? p.specEn || p.en : p.spec || p.en}</p>
                     <div className="product-meta">
                       <span>
-                        MOQ <strong>{p.moq}</strong>
+                        {T("起订量", "MOQ")}{" "}
+                        <strong>
+                          {p.moq}
+                          {T(" 件", " units")}
+                        </strong>
                       </span>
                       <span>
-                        {T("交期", "Lead time")} <strong>{p.lead}d</strong>
+                        {T("交期", "Lead time")}{" "}
+                        <strong>
+                          {p.lead}
+                          {T(" 天", " days")}
+                        </strong>
                       </span>
                     </div>
                     {showMoney && (
@@ -1743,7 +1838,7 @@ function App() {
               ))}
             </div>
           )}
-          {portal && basket.length > 0 && (
+          {portal && (basket.length > 0 || requestDraft) && (
             <div className="basket-bar">
               <span>
                 {basket.length} {T("种商品", "products")} ·{" "}
@@ -1948,7 +2043,7 @@ function App() {
             </section>
           )}
           {page === "orders" && (
-            <section className="card">
+            <section className="card mobile-records">
               {table(
                 [
                   T("订单", "Order"),
@@ -2460,34 +2555,26 @@ function App() {
                     .filter((n) => taskTab === "history" || !n.resolved)
                     .map((n) => [
                       <>
-                        {n.title}
+                        {notificationTitle(n, en)}
                         <small className="sub">
                           {n.due ? new Date(n.due).toLocaleString() : ""} ·{" "}
-                          {n.level} · {n.recipient}
+                          {n.level === "escalation"
+                            ? T("升级提醒", "Escalated")
+                            : T("常规提醒", "Standard")}{" "}
+                          ·{" "}
+                          {rows("salesDirectory").find(
+                            (s) => s.id === n.recipient,
+                          )?.name ||
+                            {
+                              owner: T("管理", "Owner"),
+                              manager: T("经理", "Manager"),
+                              sales: T("销售", "Sales"),
+                            }[n.recipient as string] ||
+                            n.recipient}
                         </small>
                       </>,
-                      <button
-                        className="link"
-                        onClick={() => {
-                          for (const kind of [
-                            "orders",
-                            "quotes",
-                            "customers",
-                          ]) {
-                            const row = rows(kind).find(
-                              (r) => r.id === n.entity,
-                            );
-                            if (row) {
-                              if (kind === "customers") {
-                                go(kind);
-                                setQuery(row.id);
-                              } else setDetail({ ...row, detailKind: kind });
-                              return;
-                            }
-                          }
-                        }}
-                      >
-                        {n.entity}
+                      <button className="link" onClick={() => openTask(n)}>
+                        {notificationEntity(n, data, en)}
                       </button>,
                       n.resolved
                         ? T("已解除", "Resolved")
@@ -2726,17 +2813,26 @@ function App() {
           }}
         />
       )}
-      {requestItems && (
+      {requestOpen && requestDraft && (
         <RequestDialog
           products={rows("products")}
           customers={rows("customers")}
           portal={!!portal}
           en={en}
-          initial={requestItems}
-          onClose={() => setRequestItems(null)}
+          items={basket}
+          setItems={setBasket}
+          draft={requestDraft}
+          onChange={setRequestDraft}
+          onClose={() => setRequestOpen(false)}
+          onDiscard={() => {
+            setBasket([]);
+            setRequestDraft(null);
+            setRequestOpen(false);
+          }}
           submit={async (v) => {
             await run("inquiry-create", v);
             setBasket([]);
+            setRequestDraft(null);
           }}
         />
       )}
@@ -2835,37 +2931,84 @@ function App() {
           )}
           {aux.kind === "guide" ? (
             <>
-              <h3>{T("从选品到交付", "From products to delivery")}</h3>
-              <ol>
-                {[
-                  T(
-                    "客户选品并提交需求，销售集中受理。",
-                    "Customers submit requests; sales receive them.",
-                  ),
-                  T(
-                    "销售创建报价并提交独立审批，批准后发布。",
-                    "Sales create quotations for independent approval and publication.",
-                  ),
-                  T(
-                    "客户确认报价生成订单；管理核实预付款。",
-                    "Customers accept quotations; management verifies deposits.",
-                  ),
-                  T(
-                    "经理释放生产、分批入库发货并记录签收。",
-                    "Managers release production, ship batches and record delivery.",
-                  ),
-                  T(
-                    "管理核实回款；全部签收且结清后完成。",
-                    "Management verifies payments; delivered and settled orders complete.",
-                  ),
-                  T(
-                    "客户维护和单据跟进独立计时，待办可进入业务记录。",
-                    "Customer maintenance and document follow-ups have independent schedules.",
-                  ),
-                ].map((x) => (
-                  <li key={x}>{x}</li>
-                ))}
-              </ol>
+              <h3>
+                {T("当前任务", "Your current task")} ·{" "}
+                {portal
+                  ? portalTitles[page]?.[en ? 1 : 0]
+                  : (navigation.find((n) => n[0] === page)?.[
+                      en ? 2 : 1
+                    ] as string)}
+              </h3>
+              <p>
+                {portal
+                  ? T(
+                      "选品后加入需求清单；尚在比较方案时选“询价”，已有具体采购计划时选“订单申请”。两者都不是正式订单。关闭草稿可继续选品，刷新或退出会清空。",
+                      "Add products to your basket. Choose Inquiry to compare pricing, or Order request when quantities and delivery needs are planned. Neither creates an order. Closing keeps your draft; refreshing or signing out clears it.",
+                    )
+                  : user.role === "sales"
+                    ? T(
+                        "从优先待办进入本人客户或单据，记录本次沟通与下次日期。询价受理后创建报价并提交审批；回款先登记线索，等待管理核实。",
+                        "Open your customer or document from a priority task, record the conversation and next date. Prepare quotations from requests and submit for approval. Record payment leads for management to verify.",
+                      )
+                    : user.role === "manager"
+                      ? T(
+                          "处理待审批报价与团队跟进。订单满足预付款条件后释放生产，再按实际数量分批入库、发运和签收；回款核实由管理完成。",
+                          "Review pending quotations and team follow-ups. Release eligible orders after the deposit requirement is met, then record production, shipments and delivery. Management verifies payments.",
+                        )
+                      : T(
+                          "优先核对风险审批、预付款与尾款提醒。回款核实后才改变已收金额；审批须由非发起人完成，库存与订单状态由实际业务动作更新。",
+                          "Review risk approvals, deposits and balance reminders. Only verified payments change received amounts. Approvals require a different reviewer; business actions update inventory and order states.",
+                        )}
+              </p>
+              <p>
+                {portal
+                  ? T(
+                      "报价页核对金额和付款条款后确认；订单页查看交付进度、已提交申请与相关文件。",
+                      "Review amounts and payment terms on Quotations before accepting. Orders shows delivery progress, submitted requests and related files.",
+                    )
+                  : pageDescriptions[page] && !en
+                    ? pageDescriptions[page]
+                    : T(
+                        "可从待办或记录详情进入下一步操作。",
+                        "Use task links or record details to take the next action.",
+                      )}
+              </p>
+              <details className="workflow-help">
+                <summary>
+                  {T("查看完整业务流程", "View the full workflow")}
+                </summary>
+                <h3>{T("从选品到交付", "From products to delivery")}</h3>
+                <ol>
+                  {[
+                    T(
+                      "客户选品并提交需求，销售集中受理。",
+                      "Customers submit requests; sales receive them.",
+                    ),
+                    T(
+                      "销售创建报价并提交独立审批，批准后发布。",
+                      "Sales create quotations for independent approval and publication.",
+                    ),
+                    T(
+                      "客户确认报价生成订单；管理核实预付款。",
+                      "Customers accept quotations; management verifies deposits.",
+                    ),
+                    T(
+                      "经理释放生产、分批入库发货并记录签收。",
+                      "Managers release production, ship batches and record delivery.",
+                    ),
+                    T(
+                      "管理核实回款；全部签收且结清后完成。",
+                      "Management verifies payments; delivered and settled orders complete.",
+                    ),
+                    T(
+                      "客户维护和单据跟进独立计时，待办可进入业务记录。",
+                      "Customer maintenance and document follow-ups have independent schedules.",
+                    ),
+                  ].map((x) => (
+                    <li key={x}>{x}</li>
+                  ))}
+                </ol>
+              </details>
             </>
           ) : aux.kind === "accept" ? (
             <>
@@ -2902,7 +3045,7 @@ function App() {
                     T("规格", "Specifications"),
                     en ? aux.row.specEn || aux.row.spec : aux.row.spec,
                   ],
-                  ["MOQ", aux.row.moq],
+                  [T("起订量（件）", "MOQ (units)"), aux.row.moq],
                   [
                     displayCurrency(en),
                     productPrice(aux.row, displayCurrency(en)) === null
@@ -3193,45 +3336,57 @@ function App() {
               {(detail?.detailKind || page) === "orders" &&
                 ["owner", "manager"].includes(user.role) &&
                 detail.status === "confirmed" &&
-                !detail.paid &&
-                detail.items.every((i: any) => !i.produced) &&
-                btn("取消未履约订单", () =>
-                  openForm(
-                    "取消订单",
-                    [{ key: "reason", label: "取消原因" }],
-                    "order-cancel",
-                    { id: detail.id },
-                  ),
-                )}
-              {(detail?.detailKind || page) === "orders" &&
-                ["owner", "manager"].includes(user.role) &&
-                detail.status === "confirmed" &&
-                detail.items.some((i: any) => i.qty > i.produced) &&
-                btn("取消部分未生产数量", () =>
-                  openForm(
-                    "取消剩余数量",
-                    [
-                      {
-                        key: "product",
-                        label: "商品",
-                        options: detail.items
-                          .filter((i: any) => i.qty > i.produced)
-                          .map((i: any) => ({
-                            value: i.product,
-                            label: `${i.sku} · 可取消 ${i.qty - i.produced}`,
-                          })),
-                      },
-                      {
-                        key: "qty",
-                        label: "取消数量",
-                        type: "number",
-                        value: 1,
-                      },
-                      { key: "reason", label: "客户沟通依据 / 原因" },
-                    ],
-                    "order-cancel-remainder",
-                    { id: detail.id, key: crypto.randomUUID() },
-                  ),
+                detail.items.some((i: any) => i.qty > i.produced) && (
+                  <details className="more-actions">
+                    <summary className="btn">
+                      {T("更多操作", "More actions")}
+                    </summary>
+                    <div>
+                      {(detail?.detailKind || page) === "orders" &&
+                        ["owner", "manager"].includes(user.role) &&
+                        detail.status === "confirmed" &&
+                        !detail.paid &&
+                        detail.items.every((i: any) => !i.produced) &&
+                        btn("取消未履约订单", () =>
+                          openForm(
+                            "取消订单",
+                            [{ key: "reason", label: "取消原因" }],
+                            "order-cancel",
+                            { id: detail.id },
+                          ),
+                        )}
+                      {(detail?.detailKind || page) === "orders" &&
+                        ["owner", "manager"].includes(user.role) &&
+                        detail.status === "confirmed" &&
+                        detail.items.some((i: any) => i.qty > i.produced) &&
+                        btn("取消部分未生产数量", () =>
+                          openForm(
+                            "取消剩余数量",
+                            [
+                              {
+                                key: "product",
+                                label: "商品",
+                                options: detail.items
+                                  .filter((i: any) => i.qty > i.produced)
+                                  .map((i: any) => ({
+                                    value: i.product,
+                                    label: `${i.sku} · 可取消 ${i.qty - i.produced}`,
+                                  })),
+                              },
+                              {
+                                key: "qty",
+                                label: "取消数量",
+                                type: "number",
+                                value: 1,
+                              },
+                              { key: "reason", label: "客户沟通依据 / 原因" },
+                            ],
+                            "order-cancel-remainder",
+                            { id: detail.id, key: crypto.randomUUID() },
+                          ),
+                        )}
+                    </div>
+                  </details>
                 )}
               {btn(T("关闭", "Close"), () => setDetail(null))}
             </div>
@@ -3483,88 +3638,90 @@ function FormModal({
           <div className="modal-body">
             <div className="form-grid">
               {form.fields.map((f) => (
-                <label
-                  key={f.key}
-                  className={f.type === "textarea" ? "full" : ""}
-                >
-                  {f.label}
-                  {f.required !== false ? " *" : ""}
-                  {f.options ? (
-                    <select
-                      value={values[f.key]}
-                      onChange={(e) => {
-                        if (
-                          form.quote &&
-                          f.key === "currency" &&
-                          values.currency !== e.target.value
-                        ) {
-                          const fx = values.fxId
-                            ? rates.find((r) => r.id === values.fxId)
-                            : products[0]?.pricingFx;
-                          if (
-                            !fx ||
-                            fx.invalid ||
-                            !Number.isFinite(Number(fx.rate)) ||
-                            Number(fx.rate) <= 0
-                          ) {
-                            setError(
-                              "没有有效汇率，无法切换报价币种 / No valid exchange rate",
-                            );
-                            return;
-                          }
-                          const convert = (n: any) =>
-                            (e.target.value === "USD"
-                              ? new Decimal(n || 0).div(fx.rate)
-                              : new Decimal(n || 0).times(fx.rate)
-                            )
-                              .toDecimalPlaces(2)
-                              .toNumber();
-                          setItems(
-                            items.map((i) => ({
-                              ...i,
-                              price: convert(i.price),
-                            })),
-                          );
-                          setValues({
-                            ...values,
-                            currency: e.target.value,
-                            fxId: fx.id,
-                            freight: convert(values.freight),
-                            fees: convert(values.fees),
-                            discount: convert(values.discount),
-                          });
-                          setError("");
-                        } else
-                          setValues({ ...values, [f.key]: e.target.value });
-                      }}
-                      required={f.required !== false}
-                    >
-                      {f.options.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  ) : f.type === "textarea" ? (
-                    <textarea
-                      value={values[f.key]}
-                      onChange={(e) =>
-                        setValues({ ...values, [f.key]: e.target.value })
-                      }
-                      required={f.required !== false}
-                    />
-                  ) : (
-                    <input
-                      type={f.type || "text"}
-                      step={f.type === "number" ? "any" : undefined}
-                      value={values[f.key]}
-                      onChange={(e) =>
-                        setValues({ ...values, [f.key]: e.target.value })
-                      }
-                      required={f.required !== false}
-                    />
+                <React.Fragment key={f.key}>
+                  {f.section && (
+                    <h3 className="full form-section-heading">{f.section}</h3>
                   )}
-                </label>
+                  <label className={f.type === "textarea" ? "full" : ""}>
+                    {f.label}
+                    {f.required !== false ? " *" : ""}
+                    {f.options ? (
+                      <select
+                        value={values[f.key]}
+                        onChange={(e) => {
+                          if (
+                            form.quote &&
+                            f.key === "currency" &&
+                            values.currency !== e.target.value
+                          ) {
+                            const fx = values.fxId
+                              ? rates.find((r) => r.id === values.fxId)
+                              : products[0]?.pricingFx;
+                            if (
+                              !fx ||
+                              fx.invalid ||
+                              !Number.isFinite(Number(fx.rate)) ||
+                              Number(fx.rate) <= 0
+                            ) {
+                              setError(
+                                "没有有效汇率，无法切换报价币种 / No valid exchange rate",
+                              );
+                              return;
+                            }
+                            const convert = (n: any) =>
+                              (e.target.value === "USD"
+                                ? new Decimal(n || 0).div(fx.rate)
+                                : new Decimal(n || 0).times(fx.rate)
+                              )
+                                .toDecimalPlaces(2)
+                                .toNumber();
+                            setItems(
+                              items.map((i) => ({
+                                ...i,
+                                price: convert(i.price),
+                              })),
+                            );
+                            setValues({
+                              ...values,
+                              currency: e.target.value,
+                              fxId: fx.id,
+                              freight: convert(values.freight),
+                              fees: convert(values.fees),
+                              discount: convert(values.discount),
+                            });
+                            setError("");
+                          } else
+                            setValues({ ...values, [f.key]: e.target.value });
+                        }}
+                        required={f.required !== false}
+                      >
+                        {f.options.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : f.type === "textarea" ? (
+                      <textarea
+                        value={values[f.key]}
+                        onChange={(e) =>
+                          setValues({ ...values, [f.key]: e.target.value })
+                        }
+                        required={f.required !== false}
+                      />
+                    ) : (
+                      <input
+                        type={f.type || "text"}
+                        step={f.type === "number" ? "any" : undefined}
+                        value={values[f.key]}
+                        onChange={(e) =>
+                          setValues({ ...values, [f.key]: e.target.value })
+                        }
+                        required={f.required !== false}
+                      />
+                    )}
+                  </label>
+                </React.Fragment>
               ))}
             </div>
             {form.allocations && (

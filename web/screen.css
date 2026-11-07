@@ -943,7 +943,7 @@
     .product-meta {
       gap: 10px;
     }
-    .product-info h3 {
+    .product-info h2 {
       font-size: 13px;
     }
     .card-actions {
@@ -2735,7 +2735,7 @@
     font-size: var(--text-meta);
     letter-spacing: 1px;
   }
-  .product-info h3 {
+  .product-info h2 {
     font-size: 18px;
     font-weight: 600;
     color: var(--ink);
@@ -3207,10 +3207,143 @@
     background: #e9effb;
   }
   .pricing-note {
-    margin-bottom: 20px;
-    line-height: 1.8;
+    margin-bottom: 16px;
+    line-height: 1.6;
+  }
+  .pricing-note summary,
+  .portal-account summary,
+  .workflow-help summary {
+    cursor: pointer;
+    padding: 8px 0;
+    color: var(--accent);
+    min-height: 44px;
+  }
+  .pricing-note details p {
+    margin: 4px 0 0;
+  }
+  .portal-account {
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 16px;
+    padding-bottom: 4px;
+  }
+  .portal-account summary {
+    color: var(--ink);
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  .portal-account p {
+    max-width: 70ch;
+    color: var(--muted);
+  }
+  .request-fields {
+    min-width: 0;
+    border: 0;
+    padding: 0;
+    margin: 0;
+  }
+  .draft-hint {
+    font-size: var(--text-ui);
+  }
+  .form-grid .form-section-heading {
+    margin: 16px 0 0;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+  }
+  .form-grid .form-section-heading:first-child {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+  }
+  .more-actions > summary {
+    display: list-item;
+    list-style-position: inside;
+    cursor: pointer;
+  }
+  .more-actions > div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-top: 8px;
+  }
+  .more-actions[open] {
+    flex-basis: 100%;
+    order: 1;
   }
   @media (max-width: 760px) {
+    .portal-layout .sidebar nav {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      overflow: visible;
+      width: 100%;
+    }
+    .portal-layout .sidebar .nav-item {
+      min-width: 0;
+      white-space: normal;
+      padding: 8px;
+    }
+    .order-toolbar {
+      flex-wrap: wrap;
+    }
+    .order-toolbar .search {
+      flex: 1 0 100%;
+      width: 100%;
+    }
+    .mobile-records.table-scroll,
+    .mobile-records > .table-scroll {
+      overflow: visible;
+    }
+    .mobile-records table,
+    .mobile-records tbody {
+      display: block;
+      min-width: 0;
+      width: 100%;
+    }
+    .mobile-records thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      overflow: hidden;
+      clip-path: inset(50%);
+    }
+    .mobile-records tbody tr {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 12px 16px;
+      padding: 20px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+    .mobile-records tbody td {
+      display: block;
+      min-width: 0;
+      padding: 0;
+      border: 0;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    .mobile-records tbody td::before {
+      content: attr(data-label);
+      display: block;
+      color: var(--muted);
+      font-size: var(--text-meta);
+      margin-bottom: 4px;
+    }
+    .mobile-records tbody td:first-child,
+    .mobile-records tbody td:last-child,
+    .mobile-records tbody td[colspan] {
+      grid-column: 1 / -1;
+    }
+    .mobile-records tbody td:first-child::before,
+    .mobile-records tbody td:last-child::before {
+      display: none;
+    }
+    .mobile-records .actions {
+      justify-content: flex-start;
+      flex-wrap: wrap;
+    }
+    .mobile-records .crm-identity {
+      min-width: 0;
+    }
     .portal-welcome {
       grid-template-columns: 1fr;
     }

@@ -663,7 +663,7 @@
     color: #99a792;
     font-size: 9px;
   }
-  .product-info h3 {
+  .product-info h2 {
     font-size: 15px;
     margin-top: 7px;
   }
@@ -1128,7 +1128,7 @@
     .product-meta {
       gap: 10px;
     }
-    .product-info h3 {
+    .product-info h2 {
       font-size: 13px;
     }
     .card-actions {
