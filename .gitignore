@@ -6,6 +6,7 @@ coverage/
 !.env.example
 .local/
 .taste-skill/
+.impeccable/config.local.json
 *.log
 *.tsbuildinfo
 playwright-report/
