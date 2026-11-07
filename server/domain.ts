@@ -21,7 +21,10 @@ const qty = z.coerce.number().int().min(1).max(1000000);
 const day = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
-  .refine((x) => !isNaN(Date.parse(x)));
+  .refine(
+    (x) =>
+      !isNaN(Date.parse(x)) && new Date(x).toISOString().slice(0, 10) === x,
+  );
 const salesRoles = ["owner", "manager", "sales"];
 export const money = (n: Decimal.Value) =>
   new Decimal(n).toDecimalPlaces(2).toNumber();
@@ -53,7 +56,12 @@ export function sanitize(value: any, u: User): any {
   const result: any = {};
   for (const [k, v] of Object.entries(value)) {
     if (["password", "content", "token"].includes(k)) continue;
-    if (["cost", "margin", "costSnapshot"].includes(k) && u.role !== "owner")
+    if (
+      ["cost", "margin", "costSnapshot", "costHistory", "costReason"].includes(
+        k,
+      ) &&
+      u.role !== "owner"
+    )
       continue;
     if (
       u.role === "customer" &&
@@ -249,8 +257,8 @@ export async function action(
           id: v.id || uid("C"),
           owner,
           since: previous?.since || v.since || businessDay(),
-          createdAt: previous?.createdAt || new Date().toISOString(),
-          lastFollow: previous?.lastFollow || new Date().toISOString(),
+          createdAt: previous?.createdAt || businessNow().toISOString(),
+          lastFollow: previous?.lastFollow || businessNow().toISOString(),
         });
         break;
       }
@@ -308,7 +316,7 @@ export async function action(
                   ...(old?.costHistory || []),
                   {
                     actor: u.id,
-                    at: new Date().toISOString(),
+                    at: businessNow().toISOString(),
                     cost: v.cost,
                     reason: v.costReason || "初始成本",
                   },
@@ -370,7 +378,7 @@ export async function action(
           address: v.address || c.address,
           status: "new",
           createdBy: u.id,
-          createdAt: new Date().toISOString(),
+          createdAt: businessNow().toISOString(),
         });
         break;
       }
@@ -418,7 +426,7 @@ export async function action(
                 .filter((c) => (c.group || c.id) === group)
                 .map((c) => c.version),
             ),
-          at: new Date().toISOString(),
+          at: businessNow().toISOString(),
         });
         break;
       }
@@ -467,6 +475,8 @@ export async function action(
           throw new ForbiddenException();
         if (v.inquiry) {
           const inquiry = await scoped(db, u, "inquiries", v.inquiry);
+          if (["closed", "ordered"].includes(inquiry.status))
+            fail("申请已关闭或已转订单");
           if (inquiry.customer !== v.customer) fail("询价客户与报价客户不一致");
           await db.put("inquiries", { ...inquiry, status: "quoted" });
         }
@@ -553,7 +563,7 @@ export async function action(
           status: "draft",
           published: false,
           approvalLog: [],
-          createdAt: previous?.createdAt || new Date().toISOString(),
+          createdAt: previous?.createdAt || businessNow().toISOString(),
         });
         break;
       }
@@ -617,8 +627,8 @@ export async function action(
               : "",
             q.depositPct < rule.depositPct ? "预付款比例不足" : "",
           ].filter(Boolean),
-          submittedAt: new Date().toISOString(),
-          stepStartedAt: new Date().toISOString(),
+          submittedAt: businessNow().toISOString(),
+          stepStartedAt: businessNow().toISOString(),
         });
         break;
       }
@@ -638,7 +648,7 @@ export async function action(
         out = await db.put("quotes", {
           ...q,
           step,
-          stepStartedAt: new Date().toISOString(),
+          stepStartedAt: businessNow().toISOString(),
           status: v.approve
             ? step === q.approvers.length
               ? "approved"
@@ -650,7 +660,7 @@ export async function action(
               actor: u.id,
               approve: v.approve,
               note: v.note,
-              at: new Date().toISOString(),
+              at: businessNow().toISOString(),
             },
           ],
         });
@@ -683,11 +693,11 @@ export async function action(
           id: uid("SO"),
           quote: q.id,
           quoteGroup: q.group,
-          confirmedAt: new Date().toISOString(),
+          confirmedAt: businessNow().toISOString(),
           status: "confirmed",
           released: false,
           paid: 0,
-          createdAt: new Date().toISOString(),
+          createdAt: businessNow().toISOString(),
         });
         await db.put("quotes", { ...q, status: "accepted" });
         if (q.inquiry) {
@@ -762,7 +772,7 @@ export async function action(
           id: uid("RC"),
           status: "pending",
           createdBy: u.id,
-          createdAt: new Date().toISOString(),
+          createdAt: businessNow().toISOString(),
         });
         break;
       }
@@ -860,7 +870,7 @@ export async function action(
             container: v.container,
             eta: v.eta,
             delivered: false,
-            at: new Date().toISOString(),
+            at: businessNow().toISOString(),
           });
         } else {
           if (i.produced + v.qty > i.qty) fail("生产超过订单数量");
@@ -878,7 +888,7 @@ export async function action(
           qty: ship ? -v.qty : v.qty,
           type: ship ? "shipment" : "production",
           actor: u.id,
-          at: new Date().toISOString(),
+          at: businessNow().toISOString(),
         });
         await db.put("operations", {
           id: v.key,
@@ -944,7 +954,7 @@ export async function action(
         const c = await required(db, v.kind, v.entity || v.customer);
         if (v.kind !== "customers" && c.customer !== v.customer)
           throw new ForbiddenException();
-        const occurred = v.occurred || new Date().toISOString();
+        const occurred = v.occurred || businessNow().toISOString();
         if (Date.parse(occurred) > Date.now() + 60000)
           fail("实际沟通时间不能晚于当前时间");
         if (v.next < chinaDay(new Date(occurred)))
@@ -975,7 +985,7 @@ export async function action(
           occurred,
           id: uid("FL"),
           actor: u.id,
-          at: new Date().toISOString(),
+          at: businessNow().toISOString(),
         });
         break;
       }
@@ -998,7 +1008,7 @@ export async function action(
           manual: true,
           reason: v.reason,
           confirmedBy: u.id,
-          fetchedAt: new Date().toISOString(),
+          fetchedAt: businessNow().toISOString(),
         });
         break;
       }
@@ -1012,7 +1022,7 @@ export async function action(
           manual: true,
           confirmedBy: u.id,
           reason,
-          fetchedAt: new Date().toISOString(),
+          fetchedAt: businessNow().toISOString(),
         });
         break;
       }
@@ -1121,7 +1131,7 @@ export async function action(
               qty: v.qty,
               reason: v.reason,
               actor: u.id,
-              at: new Date().toISOString(),
+              at: businessNow().toISOString(),
             },
           ],
         });
@@ -1168,7 +1178,7 @@ export async function action(
           qty: r.qty,
           type: "adjustment",
           actor: u.id,
-          at: new Date().toISOString(),
+          at: businessNow().toISOString(),
         });
         out = await db.put("adjustments", {
           ...r,
@@ -1267,7 +1277,7 @@ export async function scanReminders() {
           recipient,
           level,
           read: false,
-          at: new Date().toISOString(),
+          at: businessNow().toISOString(),
         });
         await db.put("mails", {
           id: uid("MAIL"),
@@ -1276,7 +1286,7 @@ export async function scanReminders() {
           body: `${t.entity} 请登录处理 / Please sign in to review.`,
           status: "captured",
           channel: "local-only",
-          at: new Date().toISOString(),
+          at: businessNow().toISOString(),
         });
         added++;
       }

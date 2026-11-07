@@ -192,6 +192,13 @@ export function BusinessDetail({
           : o.released
             ? 1
             : 0;
+  const completedSteps = [
+    !!o.released || o.paid >= (o.total * o.depositPct) / 100,
+    sum("produced") === qty && qty > 0,
+    sum("shipped") === qty && qty > 0,
+    sum("delivered") === qty && qty > 0,
+    sum("delivered") === qty && qty > 0,
+  ];
   const labels = en
     ? [
         "Deposit / Confirmation",
@@ -228,15 +235,7 @@ export function BusinessDetail({
         <div className="actions">
           <span className="badge approved">
             {isOrder
-              ? en
-                ? [
-                    "Awaiting deposit",
-                    "Production",
-                    "Ready to ship",
-                    "In transit",
-                    "Delivered",
-                  ][stage]
-                : orderStage(o)
+              ? orderStage(o, en)
               : o.published
                 ? T("已发布", "Published")
                 : T("未发布", "Unpublished")}
@@ -251,8 +250,13 @@ export function BusinessDetail({
       {isOrder && o.status !== "cancelled" && (
         <ol className="fulfillment-steps">
           {labels.map((l, i) => (
-            <li key={l} className={i <= stage ? "done" : ""}>
-              <span>{i < stage ? "✓" : i + 1}</span>
+            <li
+              key={l}
+              className={
+                completedSteps[i] ? "done" : i === stage ? "active" : ""
+              }
+            >
+              <span>{i < stage && completedSteps[i] ? "✓" : i + 1}</span>
               <small>{l}</small>
             </li>
           ))}
@@ -345,56 +349,38 @@ export function BusinessDetail({
       {isOrder && (
         <>
           <h3>{T("物流与交付", "Logistics & delivery")}</h3>
-          <Table
-            heads={[
-              T("方式 / 承运商", "Mode / Carrier"),
-              T("运单 / 柜号", "Tracking / Container"),
-              T("商品 / 数量", "Item / Quantity"),
-              T("预计到达", "Arrival"),
-              T("签收", "Delivery"),
+          <KV
+            items={[
+              [
+                T("运输方式", "Transport"),
+                shipments
+                  .map(
+                    (s) =>
+                      (({
+                        express: T("快递", "Express"),
+                        sea: T("海运", "Sea"),
+                        pickup: T("自提", "Pickup"),
+                      })[s.mode as string] ||
+                        s.mode ||
+                        "—") +
+                      " · " +
+                      s.carrier,
+                  )
+                  .join(" / ") || "—",
+              ],
+              [
+                T("运单 / 提单号", "Tracking / Bill of lading"),
+                shipments.map((s) => s.tracking).join(" / ") || "—",
+              ],
+              [
+                T("柜号", "Container"),
+                shipments
+                  .map((s) => s.container)
+                  .filter(Boolean)
+                  .join(" / ") || "—",
+              ],
             ]}
-            rows={shipments.map((s) => [
-              `${s.mode || "—"} · ${s.carrier}`,
-              <>
-                {s.tracking}
-                <small className="sub">{s.container || "—"}</small>
-              </>,
-              `${items.find((i: any) => i.product === s.product)?.name || s.product} × ${s.qty}`,
-              day(s.eta),
-              s.delivered ? (
-                <>
-                  {T("已签收", "Delivered")} {day(s.deliveredAt)}
-                </>
-              ) : role === "manager" ? (
-                <button className="btn" onClick={() => onDeliver(s)}>
-                  {T("登记签收", "Record delivery")}
-                </button>
-              ) : (
-                T("运输中", "In transit")
-              ),
-            ])}
           />
-          {!portal && (
-            <>
-              <h3>{T("分批履约数量", "Batch quantities")}</h3>
-              <Table
-                heads={[
-                  "SKU",
-                  T("有效数量", "Quantity"),
-                  T("已生产", "Produced"),
-                  T("已发货", "Shipped"),
-                  T("已签收", "Delivered"),
-                ]}
-                rows={items.map((i: any) => [
-                  i.sku,
-                  i.qty,
-                  i.produced,
-                  i.shipped,
-                  i.delivered,
-                ])}
-              />
-            </>
-          )}
           <h3>{T("回款记录", "Payment records")}</h3>
           <Table
             heads={[
@@ -414,6 +400,62 @@ export function BusinessDetail({
                   : T("待核实", "Pending"),
             ])}
           />
+          <details className="batch-details">
+            <summary>
+              {T("发运批次与履约明细", "Shipment batches and quantities")} (
+              {shipments.length})
+            </summary>{" "}
+            <Table
+              heads={[
+                T("方式 / 承运商", "Mode / Carrier"),
+                T("运单 / 柜号", "Tracking / Container"),
+                T("商品 / 数量", "Item / Quantity"),
+                T("预计到达", "Arrival"),
+                T("签收", "Delivery"),
+              ]}
+              rows={shipments.map((s) => [
+                `${s.mode || "—"} · ${s.carrier}`,
+                <>
+                  {s.tracking}
+                  <small className="sub">{s.container || "—"}</small>
+                </>,
+                `${items.find((i: any) => i.product === s.product)?.name || s.product} × ${s.qty}`,
+                day(s.eta),
+                s.delivered ? (
+                  <>
+                    {T("已签收", "Delivered")} {day(s.deliveredAt)}
+                  </>
+                ) : role === "manager" ? (
+                  <button className="btn" onClick={() => onDeliver(s)}>
+                    {T("登记签收", "Record delivery")}
+                  </button>
+                ) : (
+                  T("运输中", "In transit")
+                ),
+              ])}
+            />
+            {!portal && (
+              <>
+                <h3>{T("分批履约数量", "Batch quantities")}</h3>
+                <Table
+                  heads={[
+                    "SKU",
+                    T("有效数量", "Quantity"),
+                    T("已生产", "Produced"),
+                    T("已发货", "Shipped"),
+                    T("已签收", "Delivered"),
+                  ]}
+                  rows={items.map((i: any) => [
+                    i.sku,
+                    i.qty,
+                    i.produced,
+                    i.shipped,
+                    i.delivered,
+                  ])}
+                />
+              </>
+            )}
+          </details>
         </>
       )}
       {!portal && !isOrder && (
@@ -786,9 +828,11 @@ export function RequestDialog({
 export function DataCenter({
   onOpen,
   onImport,
+  canImportProducts,
 }: {
   onOpen: (kind: string, id: string) => void;
   onImport: (kind: string) => void;
+  canImportProducts: boolean;
 }) {
   const [q, setQ] = useState(""),
     [results, setResults] = useState<any[]>([]),
@@ -823,7 +867,14 @@ export function DataCenter({
       <Table
         heads={["类型", "名称 / 编号", "说明", "操作"]}
         rows={results.map((r) => [
-          r.kind,
+          (
+            {
+              products: "商品",
+              customers: "客户",
+              quotes: "报价",
+              orders: "订单",
+            } as Record<string, string>
+          )[r.kind],
           r.title,
           r.description,
           <button className="btn" onClick={() => onOpen(r.kind, r.id)}>
@@ -853,11 +904,12 @@ export function DataCenter({
               <a className="btn" href={"/api/v1/templates/" + key}>
                 字段模板
               </a>
-              {key !== "orders" && (
-                <button className="btn" onClick={() => onImport(key)}>
-                  导入预检
-                </button>
-              )}
+              {key !== "orders" &&
+                (key !== "products" || canImportProducts) && (
+                  <button className="btn" onClick={() => onImport(key)}>
+                    导入预检
+                  </button>
+                )}
             </div>
             {key === "orders" && (
               <p className="muted">

@@ -27,94 +27,66 @@ export function PortalHome({
     orders = (data.orders || []).filter((o) => o.status !== "cancelled"),
     quotes = (data.quotes || []).filter((q) => q.status === "approved");
   return (
-    <>
-      <section className="portal-welcome">
+    <section className="portal-welcome">
+      <div>
+        <small className="eyebrow">MADE FOR YOUR BUSINESS</small>
+        <h2>
+          {T("专属报价，放心交付。", "Your next order. Clearly connected.")}
+        </h2>
+        <p>
+          {T(
+            "精选企业采购产品，透明的沟通与可追踪的交付。从一份清单开始，让每一次合作更简单。",
+            "Curated products for your business, with dedicated quotes and visible delivery milestones. Start with a request list.",
+          )}
+        </p>
+        <div className="portal-benefits">
+          <span>✓ {T("专属销售服务", "Dedicated support")}</span>
+          <span>✓ {T("审批后正式报价", "Approved quotations")}</span>
+          <span>✓ {T("订单全程可追踪", "Track every milestone")}</span>
+        </div>
+      </div>
+      <div className="portal-company">
+        <small>
+          {T("欢迎回来 / YOUR COMPANY", "WELCOME BACK / YOUR COMPANY")}
+        </small>
+        <h3>{en ? c?.en : c?.name}</h3>
+        <p>
+          {T("专属业务", "Your contact")}: {c?.assignedContact?.name || "—"} ·{" "}
+          {c?.currency}
+        </p>
         <div>
-          <small className="eyebrow">VESTA / CUSTOMER PORTAL</small>
-          <h2>
-            {T(
-              "好产品，连接每一次合作。",
-              "Thoughtful products. Lasting partnerships.",
-            )}
-          </h2>
-          <p>
-            {T(
-              "浏览产品、提交询价，随时查看专属报价与订单进度。",
-              "Browse products, request quotes and track your orders in one place.",
-            )}
-          </p>
-          <button className="btn primary" onClick={() => onGo("products")}>
-            {T("浏览产品目录", "Explore products")} →
+          <button onClick={() => onGo("quotes")}>
+            <strong>{quotes.length}</strong>
+            {T("可确认报价", "Open quotes")}
+          </button>
+          <button onClick={() => onGo("orders")}>
+            <strong>
+              {orders.filter((o) => o.status === "confirmed").length}
+            </strong>
+            {T("履约中订单", "Active orders")}
+          </button>
+          <button onClick={() => onGo("orders")}>
+            <strong>
+              {orders.filter((o) => o.status === "completed").length}
+            </strong>
+            {T("已完成合作", "Completed")}
           </button>
         </div>
-        <div className="portal-company">
-          <small>{T("欢迎回来", "Welcome back")}</small>
-          <h3>{en ? c?.en : c?.name}</h3>
-          <p>{c?.contact}</p>
-          <div>
-            <button onClick={() => onGo("quotes")}>
-              <strong>{quotes.length}</strong>
-              {T("待确认报价", "Quotes to review")}
-            </button>
-            <button onClick={() => onGo("orders")}>
-              <strong>
-                {orders.filter((o) => o.status === "confirmed").length}
-              </strong>
-              {T("进行中订单", "Active orders")}
-            </button>
-          </div>
-        </div>
-      </section>
-      <div className="profile-totals">
-        {["CNY", "USD"].map((cur) => (
-          <div className="card" key={cur}>
-            <h4>
-              {cur} · {T("我的订单", "My orders")}
-            </h4>
-            <div className="profile-kv">
-              {[
-                [T("订单金额", "Order amount"), "total"],
-                [T("已确认回款", "Confirmed paid"), "paid"],
-                [T("待付余额", "Balance"), "balance"],
-              ].map(([label, key]) => (
-                <div key={key}>
-                  <small>{label}</small>
-                  <strong>
-                    {fmt(
-                      orders
-                        .filter((o) => o.currency === cur)
-                        .reduce(
-                          (s, o) =>
-                            s + (key === "balance" ? o.total - o.paid : o[key]),
-                          0,
-                        ),
-                      cur,
-                    )}
-                  </strong>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
       </div>
-      <div className="notice-box">
-        {T(
-          "仅显示您所属公司的业务资料。产品售价与交期以确认后的正式报价为准。",
-          "Only your company’s records are shown. Approved quotations determine final prices and delivery dates.",
-        )}
-      </div>
-    </>
+    </section>
   );
 }
+
 export const fmt = (n: number, c = "CNY") =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: c }).format(
-    n || 0,
-  );
+  new Intl.NumberFormat(c === "CNY" ? "zh-CN" : "en-US", {
+    style: "currency",
+    currency: c,
+  }).format(n || 0);
 const date = (v?: string) =>
   v
     ? new Date(v).toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" })
     : "—";
-export function orderStage(o: Row) {
+function stageText(o: Row) {
   if (o.status === "cancelled") return "已取消";
   if (o.status === "completed") return "已完成";
   if (!o.released)
@@ -125,6 +97,21 @@ export function orderStage(o: Row) {
   if (o.items.some((i: any) => i.shipped > 0)) return "运输 / 分批发货";
   if (o.items.every((i: any) => i.produced >= i.qty)) return "待发运";
   return "生产 / 备货";
+}
+export function orderStage(o: Row, en = false) {
+  const stage = stageText(o);
+  return en
+    ? {
+        已取消: "Cancelled",
+        已完成: "Completed",
+        已签收待尾款: "Delivered, unpaid",
+        待生产释放: "Ready to release",
+        待收预付款: "Awaiting deposit",
+        "运输 / 分批发货": "In transit / partial shipment",
+        待发运: "Ready to ship",
+        "生产 / 备货": "Production",
+      }[stage] || stage
+    : stage;
 }
 export function Stats({
   items,
@@ -249,7 +236,17 @@ export function Customers({
         (status === "won" ? won(c) : status === "due" ? overdue(c) : !won(c))),
   );
   const c = customers.find((c) => c.id === selected),
-    history = c ? orders.filter((o) => o.customer === c.id) : [],
+    history = c
+      ? orders
+          .filter((o) => o.customer === c.id)
+          .sort((a, b) =>
+            a.referenceIndex != null && b.referenceIndex != null
+              ? a.referenceIndex - b.referenceIndex
+              : String(b.confirmedAt || b.createdAt).localeCompare(
+                  a.confirmedAt || a.createdAt,
+                ),
+          )
+      : [],
     annual = history.filter((o) =>
       date(o.confirmedAt || o.createdAt).startsWith(
         String(businessNow().getFullYear()),
@@ -420,14 +417,16 @@ export function Customers({
                   ["联系电话", c.phone || "待补充"],
                   ["负责人", name(c.owner)],
                   ["最近有效维护", date(c.lastFollow)],
-                  [
-                    "下次维护计划",
-                    `${date(due(c))}${overdue(c) ? " · 已到期" : ""}`,
-                  ],
+                  ["下次维护计划", date(due(c))],
                 ].map(([label, value]) => (
                   <div key={label}>
                     <small>{label}</small>
-                    <strong>{value}</strong>
+                    <strong>
+                      {value}
+                      {label === "下次维护计划" && overdue(c) && (
+                        <span className="badge rejected">已到期</span>
+                      )}
+                    </strong>
                   </div>
                 ))}
               </div>
@@ -444,7 +443,10 @@ export function Customers({
                     return (
                       <div className="card" key={currency}>
                         <h4>
-                          {currency} · {os.length} 笔订单
+                          {currency} · {businessNow().getFullYear()} 年{" "}
+                          <span className="badge approved annual-count">
+                            {os.length} 笔订单
+                          </span>
                         </h4>
                         <div className="profile-kv">
                           {[
@@ -486,7 +488,17 @@ export function Customers({
                 heads={["订单", "状态", "金额", "已收 / 余额", "操作"]}
                 body={history.map((o) => [
                   o.id,
-                  orderStage(o),
+                  <span
+                    className={
+                      "badge " +
+                      (o.status === "completed" ||
+                      (o.items || []).every((i: any) => i.delivered >= i.qty)
+                        ? "approved"
+                        : "confirmed")
+                    }
+                  >
+                    {orderStage(o)}
+                  </span>,
                   fmt(o.total, o.currency),
                   `${fmt(o.paid, o.currency)} / ${fmt(o.total - o.paid, o.currency)}`,
                   <button
@@ -524,6 +536,9 @@ export function Customers({
               </div>
             </div>
             <div className="modal-foot">
+              <button className="btn" onClick={() => setSelected(null)}>
+                关闭
+              </button>
               <button
                 className="btn"
                 onClick={() => {

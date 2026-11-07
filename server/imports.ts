@@ -4,9 +4,10 @@ import { User, allow, digest } from "./auth";
 import { Store, transaction } from "./db";
 
 export const templates: Record<string, string> = {
-  orders: "externalId,customerExternalId,currency,total,paid,confirmedAt,eta,balanceDue\r\nDEMO-SO,DEMO-C01,CNY,1000,300,2026-10-01,2026-10-20,2026-10-27",
+  orders:
+    "externalId,customerExternalId,currency,total,paid,confirmedAt,eta,balanceDue\r\nDEMO-SO,DEMO-C01,CNY,1000,300,2026-10-01,2026-10-20,2026-10-27",
   products:
-    "sku,name,en,category,moq,price,usd,lead\r\nDEMO-NEW,演示产品,Demo Product,日用礼品,100,48,6.8,15",
+    "sku,name,en,category,moq,price,usd,lead,spec,specEn,safe\r\nDEMO-NEW,演示产品,Demo Product,日用礼品,100,48,6.8,15,示例规格,Sample specification,100",
   customers:
     "externalId,name,en,country,contact,email,currency,address\r\nDEMO-C01,演示客户,Demo Buyer,Singapore,Alex,buyer@example.test,USD,Demo address",
 };
@@ -50,6 +51,9 @@ const schemas = {
     name: word,
     en: word,
     category: word,
+    spec: z.string().max(500).optional(),
+    specEn: z.string().max(500).optional(),
+    safe: z.coerce.number().int().nonnegative().optional(),
     moq: z.coerce.number().int().positive().max(1e6),
     price: number,
     usd: number,
@@ -96,6 +100,10 @@ async function validate(
           message: e.message,
         })),
       );
+    for (const column of headers.filter((h) =>
+      ["cost", "margin", "stock", "reserved", "owner", "role"].includes(h),
+    ))
+      errors.push({ column, message: "此模板不允许维护受限字段" });
     const key = kind === "products" ? values.sku : values.externalId;
     if (seen.has(key))
       errors.push({

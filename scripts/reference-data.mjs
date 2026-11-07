@@ -33,6 +33,10 @@ const source = JSON.parse(
   line.slice("const SEED=".length).replace(/;\s*$/, ""),
 );
 await transaction(async (db) => {
+  if (process.argv.includes("--reset"))
+    await db.client.query(
+      "DELETE FROM records WHERE kind<>'settings' OR id IN ('reference-import','reference-v2')",
+    );
   if (await db.get("settings", "reference-import")) return;
   // New reference database only: remove initial business fixtures, preserving users and rules.
   await db.client.query("DELETE FROM records WHERE kind <> 'settings'");
@@ -106,7 +110,7 @@ await transaction(async (db) => {
           product: i.product,
           qty: i.shipped,
           mode: o.container ? "sea" : "express",
-          carrier: o.carrier,
+          carrier: o.carrier?.replace(/^(快递|海运)\s*[·.]\s*/, ""),
           tracking: o.tracking,
           container: o.container,
           eta: o.eta,
@@ -145,6 +149,10 @@ await transaction(async (db) => {
   for (const q of source.quotes)
     await db.put("quotes", {
       ...q,
+      approvalLog: (q.approvalLog || []).map((a) => ({
+        ...a,
+        approve: a.decision === "通过",
+      })),
       items: q.items.map((i) => item(i, q)),
       total: q.total / 100,
       createdAt: q.date + "T00:00:00+08:00",
@@ -200,6 +208,36 @@ await transaction(async (db) => {
     });
   }
   await db.put("settings", { id: "reference-import", date: source.now });
+});
+await transaction(async (db) => {
+  if (await db.get("settings", "reference-v2")) return;
+  const fx = {
+    id: "FX-REFERENCE",
+    base: "USD",
+    quote: "CNY",
+    rate: "7.10",
+    source: "模拟 · 原型对照专用",
+    date: "2026-10-20",
+    fetchedAt: "2026-10-20T02:00:00Z",
+    simulated: true,
+    confirmedBy: "owner",
+  };
+  await db.put("rates", fx);
+  for (const [index, o] of source.orders.entries()) {
+    const current = await db.get("orders", o.id);
+    if (current) await db.put("orders", { ...current, referenceIndex: index });
+  }
+  for (const q of source.quotes) {
+    const current = await db.get("quotes", q.id);
+    if (current && q.currency === "USD")
+      await db.put("quotes", { ...current, fx });
+  }
+  for (const c of source.contracts) {
+    const current = await db.get("contracts", c.id);
+    if (current?.status === "pending")
+      await db.put("contracts", { ...current, status: "draft" });
+  }
+  await db.put("settings", { id: "reference-v2" });
 });
 await pool.end();
 console.log(

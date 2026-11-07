@@ -25,6 +25,8 @@ import express from "express";
 import { z, ZodError } from "zod";
 import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { randomBytes } from "node:crypto";
 import { pool, migrate, read, transaction, uid } from "./db";
 import { referenceDate } from "./clock";
@@ -132,6 +134,51 @@ class Api {
   }
   @Get("search") async search(@Query("q") q: string, @Req() req: Request) {
     return searchView(await authenticate(req.cookies.vesta_session), q || "");
+  }
+  @Get("quotes/:id/items.csv") async quoteItems(
+    @Param("id") id: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const u = await authenticate(req.cookies.vesta_session),
+      q = (await listData(u, "quotes")).find((q) => q.id === id);
+    if (!q || !["approved", "accepted"].includes(q.status))
+      throw new ForbiddenException();
+    const rows = [
+      ["SKU", "商品", "规格", "数量", "单价", "金额", "币种"],
+      ...q.items.map((i: any) => [
+        i.sku,
+        i.name,
+        i.spec,
+        i.qty,
+        i.price,
+        Number((i.qty * i.price).toFixed(2)),
+        q.currency,
+      ]),
+    ];
+    const cell = (v: any) =>
+      '"' +
+      String(v ?? "")
+        .replace(/^[\s]*[=+@-]/, (m) => "'" + m)
+        .replaceAll('"', '""') +
+      '"';
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="' + id + '-items.csv"',
+    );
+    res.send("\uFEFF" + rows.map((r) => r.map(cell).join(",")).join("\r\n"));
+  }
+  @Post("reference/reset") async resetReference(@Req() req: Request) {
+    const u = await this.writeUser(req);
+    allow(u, ["owner"]);
+    if (!referenceDate) throw new ForbiddenException();
+    await promisify(execFile)(
+      process.execPath,
+      ["scripts/reference-data.mjs", "--reset"],
+      { cwd: process.cwd(), env: process.env, windowsHide: true },
+    );
+    return { ok: true };
   }
   @Post("actions/:name") async act(
     @Param("name") name: string,

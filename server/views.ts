@@ -1,7 +1,7 @@
 import { ForbiddenException, NotFoundException } from "@nestjs/common";
 import { User } from "./auth";
 import { read } from "./db";
-import { canCustomer, listData, sanitize } from "./domain";
+import { listData } from "./domain";
 
 export async function detailView(u: User, kind: string, id: string) {
   if (
@@ -43,15 +43,40 @@ export async function detailView(u: User, kind: string, id: string) {
         : (await db.all("follows"))
             .filter((f) => f.entity === id)
             .map((f) => ({ ...f, actorName: names[f.actor] || f.actor }));
+    const related = new Set([
+      id,
+      ...payments.map((p) => p.id),
+      ...(kind === "orders"
+        ? (await db.all("shipments"))
+            .filter((s) => s.order === id)
+            .map((s) => s.id)
+        : []),
+    ]);
     const events =
       u.role === "customer"
         ? []
         : (await db.all("audits"))
-            .filter((a) => a.entity === id)
+            .filter((a) => related.has(a.entity))
             .map((a) => ({
               id: a.id,
               at: a.at,
-              note: a.action,
+              note:
+                (
+                  {
+                    "quote-save": "保存报价",
+                    "quote-submit": "提交审批",
+                    "quote-decide": "审批报价",
+                    "quote-publish": "发布报价",
+                    "quote-accept": "客户确认转单",
+                    "order-release": "释放生产",
+                    "order-produce": "生产入库",
+                    "order-ship": "登记发货",
+                    "shipment-deliver": "登记签收",
+                    "receipt-verify": "核实回款",
+                    "receipt-reverse": "回款冲正",
+                    "order-cancel-remainder": "取消未生产数量",
+                  } as Record<string, string>
+                )[a.action] || a.action,
               actorName: names[a.actor] || a.actor,
             }));
     return {
@@ -79,6 +104,7 @@ export async function searchView(u: User, query: string) {
   const q = query.trim().toLowerCase().slice(0, 200);
   if (!q) return [];
   const results = [];
+  const ships = await listData(u, "shipments");
   for (const kind of ["customers", "products", "quotes", "orders"]) {
     for (const row of await listData(u, kind)) {
       if (
@@ -91,6 +117,9 @@ export async function searchView(u: User, query: string) {
           row.contact,
           row.email,
           row.customerSnapshot?.name,
+          ...ships
+            .filter((s) => s.order === row.id)
+            .map((s) => [s.tracking, s.container].join(" ")),
         ]
           .join(" ")
           .toLowerCase()

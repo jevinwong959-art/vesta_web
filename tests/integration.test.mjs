@@ -1043,3 +1043,26 @@ test("balance reminders use agreed payment due dates, and authorized search omit
   assert(productResults.length);
   assert(!JSON.stringify(productResults).includes("cost"));
 });
+
+test("formal quote CSV is public-field only, scoped, and ordinary databases cannot reset", async () => {
+  const q = (await request("owner", "data/quotes")).find(
+    (q) => q.status === "accepted" && q.total === 11200,
+  );
+  assert(q);
+  const response = await fetch(url + "quotes/" + q.id + "/items.csv", {
+    headers: { Cookie: users.buyer.cookie },
+  });
+  assert.equal(response.status, 200);
+  const csv = await response.text();
+  assert(csv.includes("SKU") && csv.includes("规格"));
+  assert(!/成本|cost|margin|approval/i.test(csv));
+  await request("buyer2", "quotes/" + q.id + "/items.csv", undefined, 403);
+  await request("owner", "reference/reset", {}, 403);
+  const preview = await request(
+    "owner",
+    "imports/products/preview",
+    { content: "sku,name,moq,price,cost\nLIMITED,Test,10,20,8" },
+    201,
+  );
+  assert(preview.rows[0].errors.some((e) => e.column === "cost"));
+});

@@ -29,6 +29,7 @@ import {
 import "./style.css";
 import "./prototype.css";
 import "./parity.css";
+import { ModalAccess } from "./modal-access";
 import { businessDay, businessNow, setReferenceDate } from "./clock";
 import {
   BusinessDetail,
@@ -85,9 +86,10 @@ const ruleNames: Record<string, string> = {
   depositPct: "预付款审批阈值（%）",
 };
 const money = (n: any, c = "CNY") =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: c }).format(
-    Number(n || 0),
-  );
+  new Intl.NumberFormat(c === "CNY" ? "zh-CN" : "en-US", {
+    style: "currency",
+    currency: c,
+  }).format(Number(n || 0));
 const today = businessDay;
 const future = (n = 30) =>
   new Date(businessNow().getTime() + n * 86400000).toISOString().slice(0, 10);
@@ -95,6 +97,7 @@ const statuses: Record<string, string> = {
   cancelled: "已取消",
   void: "已作废",
   quoted: "已报价",
+  closed: "已关闭",
   ordered: "已转订单",
   new: "待受理",
   draft: "草稿",
@@ -191,7 +194,8 @@ function App() {
     [paymentTab, setPaymentTab] = useState("receivables"),
     [paymentCurrency, setPaymentCurrency] = useState("CNY"),
     [taskTab, setTaskTab] = useState("todo"),
-    [settingsTab, setSettingsTab] = useState("permissions");
+    [settingsTab, setSettingsTab] = useState("permissions"),
+    [reference, setReference] = useState<string | null>(null);
   const en = lang === "en",
     T = (zh: string, english: string) => (en ? english : zh);
   const portal = user?.role === "customer",
@@ -221,6 +225,7 @@ function App() {
     if (!user) return;
     const health = await api("health");
     setReferenceDate(health.referenceDate);
+    setReference(health.referenceDate);
     const kinds = portal
       ? [
           "customers",
@@ -325,7 +330,23 @@ function App() {
     extra: any = {},
   ) {
     setDetail(null);
-    setForm({ title, fields, submit: (v) => run(name, { ...extra, ...v }) });
+    setForm({
+      title,
+      fields,
+      submit: (v) =>
+        run(name, {
+          ...extra,
+          ...v,
+          ...(name === "customer-save"
+            ? {
+                tags: String(v.tags || "")
+                  .split(/[,，]/)
+                  .map((x) => x.trim())
+                  .filter(Boolean),
+              }
+            : {}),
+        }),
+    });
   }
   function createCustomer(c?: Row) {
     openForm(
@@ -351,6 +372,18 @@ function App() {
           ],
         },
         { key: "phone", label: "电话", value: c?.phone || "", required: false },
+        {
+          key: "tags",
+          label: "客户标签（逗号分隔）",
+          value: (c?.tags || []).join("，"),
+          required: false,
+        },
+        {
+          key: "since",
+          label: "建档日期",
+          type: "date",
+          value: c?.since || c?.createdAt?.slice(0, 10) || today(),
+        },
         { key: "contact", label: "联系人 / Contact", value: c?.contact },
         { key: "email", label: "Email", type: "email", value: c?.email },
         { key: "address", label: "地址 / Address", value: c?.address },
@@ -538,7 +571,7 @@ function App() {
         {
           key: "destination",
           label: "目的地 / Destination",
-          value: q?.destination || "",
+          value: q?.destination || source?.address || "",
         },
         {
           key: "note",
@@ -689,7 +722,7 @@ function App() {
       (o) => o.customer === customerId && o.status !== "cancelled",
     );
     const rules = rows("settings").find((r) => r.id === "rules");
-    const now = new Date();
+    const now = businessNow();
     const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
       .toISOString()
       .slice(0, 16);
@@ -758,14 +791,7 @@ function App() {
   }
   const allowed = (id: string) =>
     portal
-      ? [
-          "products",
-          "quotes",
-          "orders",
-          "profile",
-          "contracts",
-          "notifications",
-        ].includes(id)
+      ? ["products", "quotes", "orders", "profile"].includes(id)
       : id === "audits"
         ? user?.role === "owner"
         : id === "mails"
@@ -784,7 +810,18 @@ function App() {
   const filtered = (kind: string) =>
     rows(kind).filter(
       (r) =>
-        (JSON.stringify(r) + " " + customer(r.customer))
+        (
+          JSON.stringify(r) +
+          " " +
+          customer(r.customer) +
+          " " +
+          (kind === "orders"
+            ? rows("shipments")
+                .filter((s) => s.order === r.id)
+                .map((s) => [s.tracking, s.container].join(" "))
+                .join(" ")
+            : "")
+        )
           .toLowerCase()
           .includes(query.toLowerCase()) &&
         (statusFilter === "all" ||
@@ -920,6 +957,12 @@ function App() {
   };
   const title = navigation.find((n) => n[0] === page);
   if (!ready) return <div className="loading">VESTA · Loading workspace…</div>;
+  if (user && !data.products && !error)
+    return (
+      <div className="loading">
+        {T("正在加载授权业务数据…", "Loading your workspace…")}
+      </div>
+    );
   if (!user)
     return (
       <Login
@@ -947,7 +990,26 @@ function App() {
   );
   const badge = (status: string) => (
     <span className={"badge " + status}>
-      {en ? status : statuses[status] || status}
+      {en
+        ? {
+            draft: "Draft",
+            pending: "Pending",
+            approved: "Approved",
+            accepted: "Accepted",
+            confirmed: "Active",
+            completed: "Completed",
+            new: "Under review",
+            quoted: "Quoted",
+            ordered: "Ordered",
+            closed: "Closed",
+            signed: "Signed",
+            verified: "Verified",
+            reversed: "Reversed",
+            rejected: "Rejected",
+            cancelled: "Cancelled",
+            void: "Voided",
+          }[status as string] || status
+        : statuses[status] || status}
     </span>
   );
   const table = (heads: string[], body: React.ReactNode[][]) => (
@@ -987,6 +1049,7 @@ function App() {
   const showMoney = true;
   return (
     <div className={portal ? "workspace portal-layout" : "workspace"}>
+      <ModalAccess />
       <aside className={mobile ? "sidebar mobile-open" : "sidebar"}>
         <a
           className="brand"
@@ -1029,10 +1092,19 @@ function App() {
             <span className="avatar">{user.name.slice(0, 1)}</span>
             <div>
               <strong>{user.name}</strong>
-              <small>{roles[user.role]}</small>
+              <small>
+                {en
+                  ? {
+                      owner: "Management",
+                      manager: "Manager",
+                      sales: "Sales",
+                      customer: "Customer portal",
+                    }[user.role]
+                  : roles[user.role]}
+              </small>
             </div>
             <button
-              aria-label="退出登录"
+              aria-label={T("退出登录", "Sign out")}
               className="icon-btn"
               onClick={() => {
                 void api("logout", {})
@@ -1091,6 +1163,19 @@ function App() {
               <i />
               {T("本地数据库已连接", "Local database connected")}
             </span>
+            {portal && (
+              <>
+                <button className="btn compact" onClick={() => go("contracts")}>
+                  {T("合同", "Contracts")}
+                </button>
+                <button
+                  className="btn compact"
+                  onClick={() => go("notifications")}
+                >
+                  {T("消息", "Messages")}
+                </button>
+              </>
+            )}
             <button
               className="btn compact"
               onClick={() => setLang(en ? "zh" : "en")}
@@ -1100,7 +1185,7 @@ function App() {
             </button>
             <button
               className="icon-btn"
-              aria-label="刷新"
+              aria-label={T("刷新", "Refresh")}
               onClick={() => load().catch((e) => setError(e.message))}
             >
               <RefreshCw size={17} />
@@ -1178,6 +1263,7 @@ function App() {
                   true,
                 )}
               {portal &&
+                page === "profile" &&
                 btn(T("修改联系资料", "Edit contact details"), () => {
                   const c = rows("customers")[0];
                   if (c)
@@ -1261,6 +1347,7 @@ function App() {
           {page !== "dashboard" &&
             page !== "customers" &&
             page !== "settings" &&
+            !(portal && page === "products") &&
             !["data", "profile", "notifications", "receipts"].includes(
               page,
             ) && (
@@ -1268,14 +1355,14 @@ function App() {
                 <div className="search">
                   <Search size={16} />
                   <input
-                    aria-label="搜索"
+                    aria-label={T("搜索", "Search")}
                     placeholder={T("搜索当前记录…", "Search records…")}
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                   />
                 </div>
                 <select
-                  aria-label="记录筛选"
+                  aria-label={T("记录筛选", "Filter records")}
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
                 >
@@ -1300,7 +1387,29 @@ function App() {
                     ),
                   ).map((v) => (
                     <option key={v} value={v}>
-                      {statuses[v] || v}
+                      {en
+                        ? (
+                            {
+                              已完成: "Completed",
+                              已签收待尾款: "Delivered, unpaid",
+                              "生产 / 备货": "Production",
+                              待发运: "Ready to ship",
+                              "运输 / 分批发货": "In transit / Split shipments",
+                              待收预付款: "Awaiting deposit",
+                              approved: "Approved",
+                              accepted: "Accepted",
+                              pending: "Pending",
+                              draft: "Draft",
+                              rejected: "Returned",
+                              cancelled: "Cancelled",
+                              signed: "Signed",
+                              new: "New",
+                              quoted: "Quoted",
+                              ordered: "Ordered",
+                              closed: "Closed",
+                            } as Record<string, string>
+                          )[v] || v
+                        : statuses[v] || v}
                     </option>
                   ))}
                 </select>
@@ -1401,6 +1510,50 @@ function App() {
             <PortalHome data={data} en={en} onGo={go} />
           )}
           {page === "products" && portal && (
+            <>
+              <div className="catalog-heading">
+                <div>
+                  <h2>{T("产品精选", "Explore our collection")}</h2>
+                  <p className="muted">
+                    {T(
+                      "登录客户参考价 · 正式价格以审批后的报价为准",
+                      "Account reference prices · Approved quotations are authoritative",
+                    )}
+                  </p>
+                </div>
+                <input
+                  aria-label={T("搜索产品", "Search products")}
+                  placeholder={T("搜索产品、型号…", "Search products or SKU…")}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              </div>
+              <div className="filter-chips">
+                {[
+                  "all",
+                  ...new Set(rows("products").map((p) => p.category)),
+                ].map((c) => (
+                  <button
+                    key={c}
+                    className={statusFilter === c ? "active" : ""}
+                    onClick={() => setStatusFilter(c)}
+                  >
+                    {c === "all"
+                      ? T("全部产品", "All products")
+                      : en
+                        ? {
+                            日用礼品: "Everyday gifts",
+                            商务出行: "Travel",
+                            办公文具: "Office",
+                            包装配套: "Packaging",
+                          }[c as string] || c
+                        : c}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          {page === "products" && portal && (
             <div className="product-grid">
               {filtered("products").map((p, i) => (
                 <article className="product-card" key={p.id}>
@@ -1411,14 +1564,14 @@ function App() {
                         (p.kind || productKinds[p.sku] || "box") +
                         ".svg"
                       }
-                      alt={(en ? p.en : p.name) + " 示意图"}
+                      alt={(en ? p.en : p.name) + T(" 示意图", " illustration")}
                     />
                     <span>{p.sku}</span>
                   </div>
                   <div className="product-info">
                     <small>{p.category}</small>
                     <h3>{en ? p.en : p.name}</h3>
-                    <p>{en ? p.name : p.en}</p>
+                    <p>{en ? p.specEn || p.en : p.spec || p.en}</p>
                     <div className="product-meta">
                       <span>
                         MOQ <strong>{p.moq}</strong>
@@ -1435,9 +1588,7 @@ function App() {
                             : p.usd,
                           rows("customers")[0]?.currency || "USD",
                         )}{" "}
-                        <small>
-                          {money(p.price)} / {T("件", "unit")}
-                        </small>
+                        <small>/ {T("件", "unit")}</small>
                       </div>
                     )}
                     {user.role === "owner" && (
@@ -1488,6 +1639,7 @@ function App() {
           {page === "data" && !portal && (
             <DataCenter
               onImport={setImportKind}
+              canImportProducts={user.role === "owner"}
               onOpen={(kind, id) => {
                 const row = rows(kind).find((r) => r.id === id);
                 if (!row) return;
@@ -1586,7 +1738,9 @@ function App() {
               {table(
                 [
                   T("报价 / 版本", "Quotation / Version"),
-                  T("客户", "Customer"),
+                  portal
+                    ? T("商品与数量", "Products / quantities")
+                    : T("客户", "Customer"),
                   T("金额", "Amount"),
                   T("状态", "Status"),
                   T("有效期", "Valid until"),
@@ -1600,7 +1754,17 @@ function App() {
                       {q.id}
                       <small className="sub">V{q.revision}</small>
                     </strong>,
-                    customer(q.customer),
+                    portal ? (
+                      <>
+                        {q.items.map((i: any) => (
+                          <small className="sub" key={i.product}>
+                            {en ? i.en : i.name} × {i.qty}
+                          </small>
+                        ))}
+                      </>
+                    ) : (
+                      customer(q.customer)
+                    ),
                     money(q.total, q.currency),
                     <>
                       {badge(q.status)}
@@ -1615,7 +1779,12 @@ function App() {
                           {rows("salesDirectory").find(
                             (u) => u.id === q.createdBy,
                           )?.name || q.createdBy}{" "}
-                          · {q.approvers?.[q.step] || ""}
+                          ·{" "}
+                          {rows("salesDirectory").find(
+                            (u) => u.id === q.approvers?.[q.step],
+                          )?.name ||
+                            q.approvers?.[q.step] ||
+                            ""}
                         </small>
                       )}
                     </>,
@@ -1623,6 +1792,41 @@ function App() {
                     btn(T("查看详情", "View details"), () => setDetail(q)),
                   ]),
               )}
+            </section>
+          )}
+          {page === "orders" && portal && (
+            <section className="card section-gap">
+              <div className="card-head">
+                <h3>{T("已提交的申请", "Submitted requests")}</h3>
+                {btn(
+                  T("新建订单申请", "New order request"),
+                  () => go("products"),
+                  true,
+                )}
+              </div>
+              <ParityTable
+                heads={[
+                  T("申请编号", "Reference"),
+                  T("类型", "Type"),
+                  T("商品数量", "Units"),
+                  T("状态", "Status"),
+                  T("操作", "Action"),
+                ]}
+                rows={rows("inquiries").map((i) => [
+                  i.id,
+                  i.type === "order_request"
+                    ? T("订单申请", "Order request")
+                    : T("询价申请", "Inquiry"),
+                  (i.items || [{ qty: i.qty }]).reduce(
+                    (s: number, x: any) => s + x.qty,
+                    0,
+                  ),
+                  badge(i.status),
+                  btn(T("详情", "Details"), () =>
+                    setAux({ kind: "inquiries", row: i }),
+                  ),
+                ])}
+              />
             </section>
           )}
           {page === "orders" && (
@@ -1654,7 +1858,9 @@ function App() {
                       )}
                     </>,
                     <>
-                      <span className="badge approved">{orderStage(o)}</span>
+                      <span className="badge approved">
+                        {orderStage(o, en)}
+                      </span>
                       {duePayment(o) && (
                         <span className="badge rejected">
                           {T("尾款逾期", "Payment overdue")}
@@ -1815,7 +2021,7 @@ function App() {
                         r.status === "pending" &&
                         btn(
                           "核实到账",
-                          () => perform("receipt-verify", { id: r.id }),
+                          () => setAux({ kind: "verify-receipt", row: r }),
                           true,
                         )}
                       {finance &&
@@ -2334,6 +2540,36 @@ function App() {
               )}
             </>
           )}
+          {reference && (
+            <div className="reference-banner">
+              {T("原型参考库 · 演示日期", "Prototype reference · Demo date")}{" "}
+              {reference} ·{" "}
+              {T("与日常本地库隔离", "Separate from your local workspace")}
+              {user.role === "owner" && (
+                <button
+                  className="btn compact"
+                  onClick={() =>
+                    setForm({
+                      title: "恢复原型参考数据（仅隔离参考库）",
+                      fields: [
+                        {
+                          key: "confirm",
+                          label: "输入 RESET 确认清除本参考库的测试改动",
+                        },
+                      ],
+                      submit: async (v) => {
+                        if (v.confirm !== "RESET") throw Error("请输入 RESET");
+                        await api("reference/reset", {});
+                        await load();
+                      },
+                    })
+                  }
+                >
+                  恢复参考数据
+                </button>
+              )}
+            </div>
+          )}
           <footer>
             VESTA TRADE WORKSPACE{" "}
             <span>
@@ -2398,7 +2634,20 @@ function App() {
           }
           onClose={() => setAux(null)}
           footer={
-            aux.kind === "accept" ? (
+            aux.kind === "verify-receipt" ? (
+              <button
+                className="btn primary"
+                disabled={busy}
+                onClick={async () => {
+                  try {
+                    await run("receipt-verify", { id: aux.row.id });
+                    setAux(null);
+                  } catch {}
+                }}
+              >
+                确认核实到账并核销
+              </button>
+            ) : aux.kind === "accept" ? (
               <button
                 className="btn primary"
                 disabled={busy}
@@ -2606,7 +2855,24 @@ function App() {
                         "terms",
                       ].includes(k) && typeof v !== "object",
                   )
-                  .map(([k, v]) => [k, String(v)])}
+                  .map(([k, v]) => [
+                    (
+                      {
+                        name: T("标题", "Title"),
+                        order: T("订单", "Order"),
+                        version: T("版本", "Version"),
+                        status: T("状态", "Status"),
+                        valid: T("有效期", "Valid until"),
+                        amount: T("金额", "Amount"),
+                        currency: T("币种", "Currency"),
+                        receivedAt: T("实际收款日期", "Received on"),
+                        transaction: T("银行流水号", "Transaction"),
+                        note: T("备注", "Note"),
+                        terms: T("条款", "Terms"),
+                      } as Record<string, string>
+                    )[k],
+                    k === "status" ? badge(String(v)) : String(v),
+                  ])}
               />
               {aux.row.allocations && (
                 <ParityTable
@@ -2689,7 +2955,10 @@ function App() {
                       "审批通过",
                       () =>
                         openForm(
-                          "审批通过",
+                          "审批通过 · " +
+                            detail.id +
+                            " · " +
+                            money(detail.total, detail.currency),
                           [{ key: "note", label: "审批意见" }],
                           "quote-decide",
                           { id: detail.id, approve: true },
@@ -2734,6 +3003,15 @@ function App() {
                 btn(T("正式报价 / PDF", "Quotation / PDF"), () =>
                   setPrintQuote(detail),
                 )}
+              {(detail.detailKind || page) === "quotes" &&
+                ["approved", "accepted"].includes(detail.status) && (
+                  <a
+                    className="btn"
+                    href={"/api/v1/quotes/" + detail.id + "/items.csv"}
+                  >
+                    {T("商品明细 CSV", "Item details CSV")}
+                  </a>
+                )}
               {(detail.detailKind || page) === "orders" &&
                 warehouse &&
                 detail.status === "confirmed" && (
@@ -2746,14 +3024,19 @@ function App() {
                       )
                     ) : (
                       <>
-                        {btn("分批生产入库", () => batch(detail, false))}
-                        {btn("分批发运", () => batch(detail, true), true)}
+                        {detail.items.some((i: any) => i.produced < i.qty) &&
+                          btn("分批生产入库", () => batch(detail, false))}
+                        {detail.items.some(
+                          (i: any) => i.shipped < i.produced,
+                        ) && btn("分批发运", () => batch(detail, true), true)}
                       </>
                     )}
                   </>
                 )}
               {(detail?.detailKind || page) === "orders" &&
                 (sales || finance) &&
+                detail.total > detail.paid &&
+                detail.status !== "cancelled" &&
                 btn("登记回款", () => receipt(detail), true)}
               {sales &&
                 ["confirmed", "draft", "pending", "approved"].includes(
@@ -2776,6 +3059,8 @@ function App() {
               {(detail?.detailKind || page) === "orders" &&
                 ["owner", "manager"].includes(user.role) &&
                 detail.status === "confirmed" &&
+                !detail.paid &&
+                detail.items.every((i: any) => !i.produced) &&
                 btn("取消未履约订单", () =>
                   openForm(
                     "取消订单",
@@ -2787,6 +3072,7 @@ function App() {
               {(detail?.detailKind || page) === "orders" &&
                 ["owner", "manager"].includes(user.role) &&
                 detail.status === "confirmed" &&
+                detail.items.some((i: any) => i.qty > i.produced) &&
                 btn("取消部分未生产数量", () =>
                   openForm(
                     "取消剩余数量",
@@ -3151,6 +3437,32 @@ function FormModal({
             {form.quote && (
               <div className="quote-lines">
                 <h3>报价商品 / Quotation lines</h3>
+                <p className="notice-box">
+                  合计 / Total:{" "}
+                  {money(
+                    items.reduce(
+                      (s, i) => s + Number(i.qty) * Number(i.price),
+                      0,
+                    ) +
+                      Number(values.freight || 0) +
+                      Number(values.fees || 0) -
+                      Number(values.discount || 0),
+                    values.currency || "CNY",
+                  )}{" "}
+                  · 预付款 / Deposit:{" "}
+                  {money(
+                    ((items.reduce(
+                      (s, i) => s + Number(i.qty) * Number(i.price),
+                      0,
+                    ) +
+                      Number(values.freight || 0) +
+                      Number(values.fees || 0) -
+                      Number(values.discount || 0)) *
+                      Number(values.depositPct || 0)) /
+                      100,
+                    values.currency || "CNY",
+                  )}
+                </p>
                 {items.map((i, index) => (
                   <div className="quote-line" key={index}>
                     <select
@@ -3374,6 +3686,30 @@ function ImportModal({
             <a className="btn" href={"/api/v1/templates/" + kind}>
               下载模板
             </a>
+            {kind === "products" && (
+              <button
+                className="btn"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  setError("");
+                  try {
+                    setPreview(
+                      await api("imports/products/preview", {
+                        content:
+                          "sku,name,en,category,moq,price,usd,lead\nDEMO-PREVIEW-A,预检样例,Preview,gifts,100,48,6.8,15\nDEMO-PREVIEW-B,错误MOQ,Invalid MOQ,gifts,0,48,6.8,15\nDEMO-PREVIEW-A,重复编号,Duplicate,gifts,100,48,6.8,15",
+                      }),
+                    );
+                  } catch (e) {
+                    setError((e as Error).message);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                查看预检样例
+              </button>
+            )}
             <input
               aria-label="选择 CSV 文件"
               type="file"
