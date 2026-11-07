@@ -123,6 +123,14 @@ const productKinds: Record<string, string> = {
   "VT-CB12": "tote",
   "VT-GBOX": "box",
 };
+const categoryNames: Record<string, string> = {
+  日用礼品: "Everyday gifts",
+  商务出行: "Travel",
+  办公文具: "Office",
+  包装配套: "Packaging",
+};
+const categoryLabel = (category: string, en: boolean) =>
+  en ? categoryNames[category] || category : category;
 const pageDescriptions: Record<string, string> = {
   dashboard: "订单、交付、回款与待办，掌握当前业务进展。",
   customers: "一客一档，把每次沟通、历史订单和维护计划沉淀在一起。",
@@ -1622,18 +1630,12 @@ function App() {
                   <button
                     key={c}
                     className={statusFilter === c ? "active" : ""}
+                    aria-pressed={statusFilter === c}
                     onClick={() => setStatusFilter(c)}
                   >
                     {c === "all"
                       ? T("全部产品", "All products")
-                      : en
-                        ? {
-                            日用礼品: "Everyday gifts",
-                            商务出行: "Travel",
-                            办公文具: "Office",
-                            包装配套: "Packaging",
-                          }[c as string] || c
-                        : c}
+                      : categoryLabel(c, en)}
                   </button>
                 ))}
               </div>
@@ -1641,6 +1643,14 @@ function App() {
           )}
           {page === "products" && portal && (
             <div className="product-grid">
+              {!filtered("products").length && (
+                <p className="empty" role="status">
+                  {T(
+                    "没有匹配的产品，请尝试其他关键词或分类。",
+                    "No matching products. Try another search or category.",
+                  )}
+                </p>
+              )}
               {filtered("products").map((p, i) => (
                 <article className="product-card" key={p.id}>
                   <div className={"product-art art-" + (i % 6)}>
@@ -1655,7 +1665,7 @@ function App() {
                     <span>{p.sku}</span>
                   </div>
                   <div className="product-info">
-                    <small>{p.category}</small>
+                    <small>{categoryLabel(p.category, en)}</small>
                     <h3>{en ? p.en : p.name}</h3>
                     <p>{en ? p.specEn || p.en : p.spec || p.en}</p>
                     <div className="product-meta">

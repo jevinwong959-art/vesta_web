@@ -708,9 +708,9 @@ export function Overview({
       <div className="dashboard-grid">
         <section className="card">
           <div className="card-head">
-            <h3>
+            <h2>
               {T("订单与回款趋势", "Orders and payments")} · {currency}
-            </h3>
+            </h2>
             <small>
               {T(
                 "近六个月订单；已收按该批订单统计",
@@ -775,7 +775,7 @@ export function Overview({
         </section>
         <section className="card">
           <div className="card-head">
-            <h3>{T("优先处理", "Priority tasks")}</h3>
+            <h2>{T("优先处理", "Priority tasks")}</h2>
             <Bell size={18} />
           </div>
           <div className="priority-tasks">
@@ -800,7 +800,7 @@ export function Overview({
       </div>
       <section className="card section-gap">
         <div className="card-head">
-          <h3>{T("重点订单跟踪", "Priority orders")}</h3>
+          <h2>{T("重点订单跟踪", "Priority orders")}</h2>
           <button className="link" onClick={() => onGo("orders")}>
             {T("全部订单", "All orders")} →
           </button>

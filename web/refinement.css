@@ -2,8 +2,12 @@
    Semantic status colors remain distinct. Printing uses the original document CSS. */
 @media screen {
   :root {
-    --green: #2855d9;
-    --teal: #2855d9;
+    --accent: #2855d9;
+    --accent-hover: #2046b8;
+    --green: var(--accent);
+    --teal: var(--accent);
+    --text-meta: 12px;
+    --text-ui: 13px;
     --ink: #202631;
     --muted: #596575;
     --line: #e2e6ed;
@@ -37,7 +41,7 @@
   .workspace:not(.portal-layout) > .sidebar {
     width: var(--sidebar-width);
     padding: 28px 16px 20px;
-    background: #fff;
+    background: var(--surface);
     color: var(--muted);
     border-right: 1px solid var(--line);
   }
@@ -61,19 +65,19 @@
   }
   .brand small {
     color: var(--muted);
-    font-size: 8px;
-    letter-spacing: 1.4px;
+    font-size: 11px;
+    letter-spacing: 0.6px;
   }
   .nav-caption {
     margin: 32px 12px 12px;
     color: var(--muted);
-    font-size: 10px;
+    font-size: var(--text-meta);
     letter-spacing: 1px;
   }
   .nav-section {
     padding: 24px 12px 10px;
     color: var(--muted);
-    font-size: 11px;
+    font-size: var(--text-meta);
   }
   .sidebar nav {
     gap: 4px;
@@ -83,7 +87,7 @@
     border-radius: 7px;
     padding: 10px 12px;
     color: #596373;
-    font-size: 13px;
+    font-size: var(--text-ui);
     font-weight: 500;
     gap: 12px;
   }
@@ -98,11 +102,11 @@
   }
   .workspace:not(.portal-layout) .nav-item.active {
     background: var(--accent-soft);
-    color: var(--green);
+    color: var(--accent);
     box-shadow: none;
   }
   .workspace:not(.portal-layout) .nav-item.active svg {
-    color: var(--green);
+    color: var(--accent);
     stroke-width: 2;
   }
   .side-foot {
@@ -129,7 +133,7 @@
   }
   .profile small {
     color: var(--muted);
-    font-size: 11px;
+    font-size: var(--text-meta);
   }
   .avatar {
     background: #edf0f6;
@@ -141,7 +145,7 @@
   .topbar {
     height: 72px;
     padding-inline: 40px;
-    background: #ffffff;
+    background: var(--surface);
     border-color: var(--line);
   }
   .breadcrumb {
@@ -156,14 +160,14 @@
   }
   .connection {
     color: var(--muted);
-    font-size: 11px;
+    font-size: var(--text-meta);
   }
   .page-heading {
     margin-bottom: 30px;
     align-items: flex-end;
   }
   .page-heading .eyebrow {
-    font-size: 10px;
+    font-size: var(--text-meta);
     color: var(--muted);
     font-weight: 500;
     letter-spacing: 1.3px;
@@ -176,7 +180,7 @@
     margin-top: 8px;
   }
   .page-heading p {
-    font-size: 13px;
+    font-size: var(--text-ui);
     color: var(--muted);
     margin-top: 10px;
     line-height: 1.7;
@@ -191,8 +195,8 @@
     border-radius: 7px;
     border-color: #d9dee7;
     color: #3f4959;
-    background: white;
-    font-size: 13px;
+    background: var(--surface);
+    font-size: var(--text-ui);
     font-weight: 600;
   }
   .btn:hover {
@@ -200,19 +204,19 @@
     border-color: #bcc6d8;
   }
   .btn.primary {
-    background: var(--green);
-    border-color: var(--green);
+    background: var(--accent);
+    border-color: var(--accent);
     color: #fff;
     box-shadow: 0 2px 3px #2855d918;
   }
   .btn.primary:hover {
-    background: #2046b8;
-    border-color: #2046b8;
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
   }
   .btn.soft {
     background: var(--accent-soft);
     border-color: transparent;
-    color: var(--green);
+    color: var(--accent);
   }
   .btn.compact {
     min-height: 34px;
@@ -229,13 +233,13 @@
     color: var(--ink);
   }
   .link {
-    color: var(--green);
-    font-size: 13px;
+    color: var(--accent);
+    font-size: var(--text-ui);
   }
   button:focus-visible,
   a:focus-visible,
   summary:focus-visible {
-    outline: 3px solid #2855d9;
+    outline: 3px solid var(--accent);
     outline-offset: 3px;
   }
   input,
@@ -244,12 +248,12 @@
     border-color: #d8dee8;
     border-radius: 7px;
     color: var(--ink);
-    background: #fff;
+    background: var(--surface);
   }
   input:focus,
   select:focus,
   textarea:focus {
-    border-color: var(--green);
+    border-color: var(--accent);
     box-shadow: 0 0 0 3px #2855d912;
   }
   input::placeholder,
@@ -263,6 +267,39 @@
   .empty h3,
   .empty p {
     color: var(--muted);
+  }
+  label {
+    font-size: var(--text-ui);
+    line-height: 1.5;
+  }
+  .product-art span,
+  .local-label,
+  .local-label small,
+  .workspace footer,
+  .workspace td small,
+  .workspace td .sub,
+  .workspace .connection,
+  .workspace .empty p,
+  .workspace .pricing-note {
+    font-size: var(--text-meta);
+    line-height: 1.6;
+  }
+  .workspace footer {
+    gap: 12px 24px;
+    flex-wrap: wrap;
+    letter-spacing: 0;
+  }
+  .workspace footer span {
+    overflow-wrap: anywhere;
+  }
+  input,
+  select,
+  textarea {
+    caret-color: var(--accent);
+  }
+  ::selection {
+    color: var(--ink);
+    background: #dce6ff;
   }
   .upload-file {
     min-width: 0;
@@ -280,13 +317,14 @@
   .product-card {
     border: 1px solid var(--line);
     border-radius: 12px;
-    background: white;
+    background: var(--surface);
     box-shadow: 0 2px 4px #20263103;
   }
   .card-head {
     padding: 20px 24px;
     border-color: #edf0f5;
   }
+  .card-head h2,
   .card-head h3 {
     font-size: 15px;
     font-weight: 650;
@@ -308,7 +346,7 @@
   }
   .stat-label {
     color: var(--muted);
-    font-size: 13px;
+    font-size: var(--text-ui);
   }
   .stat-label > span {
     color: #788398;
@@ -343,7 +381,7 @@
   .stage-flow > button {
     padding: 20px;
     border-color: #e9edf3;
-    background: #fff;
+    background: var(--surface);
   }
   .stage-flow > button:last-child {
     border-right: 0;
@@ -368,7 +406,7 @@
   .stage-flow span {
     display: block;
     color: var(--muted);
-    font-size: 10px;
+    font-size: var(--text-meta);
     top: auto;
     bottom: 23px;
     right: 16px;
@@ -391,10 +429,10 @@
     background: #c6d3f9;
   }
   .chart-month small {
-    font-size: 11px;
+    font-size: var(--text-meta);
   }
   .chart-legend {
-    color: #2855d9;
+    color: var(--accent);
     padding: 16px 0 20px;
     font-size: 12px;
   }
@@ -427,7 +465,7 @@
     padding: 20px 0;
     color: var(--ink);
     border-color: var(--line);
-    background: #fff;
+    background: var(--surface);
   }
   .priority-tasks button:last-child {
     border: 0;
@@ -436,7 +474,7 @@
     background: var(--surface-soft);
   }
   .priority-tasks strong {
-    font-size: 13px;
+    font-size: var(--text-ui);
     font-weight: 500;
   }
   .priority-tasks small {
@@ -455,7 +493,7 @@
   .crm-toolbar {
     padding: 16px 20px;
     gap: 12px;
-    background: #fff;
+    background: var(--surface);
     border-color: var(--line);
   }
   .toolbar {
@@ -468,10 +506,10 @@
   .toolbar select,
   .crm-toolbar input,
   .crm-toolbar select {
-    font-size: 13px;
+    font-size: var(--text-ui);
   }
   .table-scroll table {
-    font-size: 13px;
+    font-size: var(--text-ui);
     font-variant-numeric: tabular-nums;
   }
   .table-scroll th {
@@ -479,10 +517,11 @@
     font-size: 12px;
     font-weight: 500;
     color: #667184;
-    background: #f8f9fb;
+    background: var(--surface-soft);
     border-bottom: 1px solid var(--line);
   }
   .table-scroll td {
+    font-size: var(--text-ui);
     padding: 18px 20px;
     border-color: #edf0f5;
     color: #394353;
@@ -501,7 +540,7 @@
   .badge {
     border-radius: 5px;
     padding: 4px 9px;
-    font-size: 11px;
+    font-size: var(--text-meta);
     font-weight: 500;
   }
   .badge.approved,
@@ -529,11 +568,11 @@
   .tabs button {
     color: var(--muted);
     padding: 14px 4px;
-    font-size: 13px;
+    font-size: var(--text-ui);
   }
   .tabs button.active {
-    color: var(--green);
-    box-shadow: inset 0 -2px var(--green);
+    color: var(--accent);
+    box-shadow: inset 0 -2px var(--accent);
   }
   .modal-backdrop {
     background: #19213265;
@@ -546,7 +585,7 @@
   }
   .modal-head {
     padding: 24px 28px;
-    background: white;
+    background: var(--surface);
     border-color: var(--line);
   }
   .modal-head h2 {
@@ -560,7 +599,7 @@
   }
   .modal-foot,
   .modal-actions {
-    background: #f8f9fb;
+    background: var(--surface-soft);
     border-color: var(--line);
     padding: 18px 28px;
   }
@@ -570,7 +609,7 @@
     color: var(--muted);
   }
   .profile-totals > .card {
-    background: #f8f9fb;
+    background: var(--surface-soft);
     box-shadow: none;
   }
   .crm-timeline article:before {
@@ -582,13 +621,13 @@
   }
   .fulfillment-steps li.done > span,
   .fulfillment-steps li.active span {
-    background: var(--green);
+    background: var(--accent);
     color: #fff;
     box-shadow: 0 0 0 5px #edf2ff;
   }
   .fulfillment-steps .done,
   .fulfillment-steps li.active small {
-    color: var(--green);
+    color: var(--accent);
   }
   .introcard {
     background: #eef3ff;
@@ -600,7 +639,7 @@
     border-color: #dfe7f7;
   }
   .batch-details summary {
-    color: var(--green);
+    color: var(--accent);
   }
   .empty {
     padding: 48px 24px;
@@ -613,7 +652,7 @@
   /* Customer-facing catalogue shares the same type and controls. */
   .portal-layout > .sidebar {
     visibility: visible;
-    background: #fff;
+    background: var(--surface);
     padding-inline: 40px;
     border-color: var(--line);
   }
@@ -632,11 +671,11 @@
     border-radius: 6px;
   }
   .portal-layout .sidebar .nav-item.active {
-    color: var(--green);
+    color: var(--accent);
     background: var(--accent-soft);
   }
   .portal-layout .sidebar .nav-item.active svg {
-    color: var(--green);
+    color: var(--accent);
   }
   .portal-layout .profile {
     border: 0;
@@ -691,7 +730,7 @@
     border-radius: 6px;
     color: var(--muted);
     border-color: var(--line);
-    font-size: 13px;
+    font-size: var(--text-ui);
   }
   .filter-chips .active {
     background: #283349;
@@ -726,9 +765,12 @@
   .product-info {
     padding: 24px;
   }
+  .product-grid > .empty {
+    grid-column: 1 / -1;
+  }
   .product-info > small {
     color: var(--muted);
-    font-size: 11px;
+    font-size: var(--text-meta);
     letter-spacing: 1px;
   }
   .product-info h3 {
@@ -739,7 +781,7 @@
   }
   .product-info p {
     color: var(--muted);
-    font-size: 13px;
+    font-size: var(--text-ui);
     line-height: 1.6;
   }
   .product-meta {
@@ -778,7 +820,7 @@
   .login {
     grid-template-columns: 1.08fr 1fr;
     min-height: 100dvh;
-    background: #fff;
+    background: var(--surface);
   }
   .login-story {
     background: #232d42;
@@ -818,7 +860,7 @@
   }
   .login-story > small {
     color: #afbdd4;
-    font-size: 11px;
+    font-size: var(--text-meta);
     letter-spacing: 1px;
   }
   .login-stats {
@@ -835,11 +877,11 @@
   }
   .login-stats small {
     color: #c7d1e2;
-    font-size: 13px;
+    font-size: var(--text-ui);
     margin-top: 10px;
   }
   .login-panel {
-    background: #fff;
+    background: var(--surface);
     padding: 48px;
   }
   .login-card {
@@ -847,7 +889,7 @@
   }
   .login-card .eyebrow {
     color: #64748d;
-    font-size: 11px;
+    font-size: var(--text-meta);
     letter-spacing: 1.3px;
   }
   .login-card h2 {
@@ -864,7 +906,7 @@
   }
   .login-card label {
     color: #445064;
-    font-size: 13px;
+    font-size: var(--text-ui);
   }
   .login-card input {
     height: 48px;
@@ -898,14 +940,14 @@
   .demo-accounts button {
     min-height: 64px;
     border-radius: 8px;
-    background: white;
+    background: var(--surface);
     color: #59657a;
     border-color: var(--line);
-    font-size: 13px;
+    font-size: var(--text-ui);
   }
   .demo-accounts button small {
     color: #536078;
-    font-size: 11px;
+    font-size: var(--text-meta);
   }
   .demo-accounts button.selected {
     background: var(--accent-soft);
@@ -927,8 +969,8 @@
     z-index: 10000;
     padding: 12px 20px;
     border-radius: 6px;
-    background: #fff;
-    color: var(--green);
+    background: var(--surface);
+    color: var(--accent);
     transform: translateY(-160%);
   }
   .skip-link:focus {
@@ -1044,7 +1086,7 @@
     padding: 5px;
   }
   .crm-stat > small {
-    font-size: 11px;
+    font-size: var(--text-meta);
   }
   .stage-flow > button {
     padding: 16px 12px;
@@ -1251,5 +1293,10 @@
   }
   .card-actions .btn {
     min-width: 0;
+  }
+  .workspace input,
+  .workspace select,
+  .workspace textarea {
+    font-size: 16px;
   }
 }
