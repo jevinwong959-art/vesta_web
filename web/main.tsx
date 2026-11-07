@@ -1090,6 +1090,9 @@ function App() {
   const showMoney = true;
   return (
     <div className={portal ? "workspace portal-layout" : "workspace"}>
+      <a className="skip-link" href="#workspace-content">
+        {T("跳转到页面内容", "Skip to content")}
+      </a>
       <ModalAccess />
       <aside className={mobile ? "sidebar mobile-open" : "sidebar"}>
         <a
@@ -1108,7 +1111,10 @@ function App() {
         <div className="nav-caption">
           {portal ? "CUSTOMER PORTAL" : "BUSINESS OPERATIONS"}
         </div>
-        <nav aria-label={T("主导航", "Main navigation")}>
+        <nav
+          id="workspace-navigation"
+          aria-label={T("主导航", "Main navigation")}
+        >
           {navigation
             .filter((n) => allowed(n[0]))
             .map(([id, zh, eng, Icon]) => (
@@ -1173,7 +1179,13 @@ function App() {
           <div className="breadcrumb">
             <button
               className="icon-btn mobile-toggle"
-              aria-label="打开导航菜单"
+              aria-label={
+                mobile
+                  ? T("关闭导航菜单", "Close navigation")
+                  : T("打开导航菜单", "Open navigation")
+              }
+              aria-expanded={mobile}
+              aria-controls="workspace-navigation"
               onClick={() => setMobile(!mobile)}
             >
               <Menu size={20} />
@@ -1240,7 +1252,7 @@ function App() {
             </button>
           </div>
         </header>
-        <div className="content">
+        <div className="content" id="workspace-content" tabIndex={-1}>
           <div className="page-heading">
             <div>
               <div className="eyebrow">
@@ -3188,6 +3200,9 @@ function Login({
     [busy, setBusy] = useState(false);
   return (
     <div className="login">
+      <a className="skip-link" href="#login-form">
+        跳转到登录表单
+      </a>
       <section className="login-story">
         <div className="brand">
           <span className="brand-symbol">V</span>
@@ -3196,38 +3211,36 @@ function Login({
           </div>
         </div>
         <div>
-          <span className="eyebrow">
-            CONNECTED BUSINESS. CLEARER POSSIBILITIES.
-          </span>
+          <span className="eyebrow">VESTA / 销售与客户协作</span>
           <h1>
-            把全球生意，
+            Vesta 外贸协作，
             <br />
-            带入清晰有序的日常。
+            从询价到回款。
           </h1>
           <p>
-            从询价、报价到交付与回款，
+            团队跟进销售，客户查看订单。
             <br />
-            让团队和客户始终保持同步。
+            在同一个工作空间，接续每一步业务。
           </p>
           <div className="login-stats">
             <span>
-              01<small>销售协同</small>
+              01<small>询价与报价</small>
             </span>
             <span>
-              02<small>客户门户</small>
+              02<small>生产与交付</small>
             </span>
             <span>
-              03<small>履约追踪</small>
+              03<small>核款与结清</small>
             </span>
           </div>
         </div>
         <small>VESTA · LOCAL DEMONSTRATION / 2026</small>
       </section>
       <section className="login-panel">
-        <div className="login-card">
-          <span className="eyebrow">WELCOME TO YOUR WORKSPACE</span>
+        <div className="login-card" id="login-form" tabIndex={-1}>
+          <span className="eyebrow">VESTA WORKSPACE</span>
           <h2>{resetToken ? "设置新密码" : "登录工作空间"}</h2>
-          <p>使用独立账号体验真实权限与业务流程。</p>
+          <p>选择演示角色，或使用你的账号继续工作。</p>
           <form
             onSubmit={async (e) => {
               e.preventDefault();
@@ -3255,6 +3268,7 @@ function Login({
               账号
               <input
                 autoComplete="username"
+                required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
               />
@@ -3263,14 +3277,21 @@ function Login({
               密码
               <input
                 type="password"
-                autoComplete="current-password"
+                autoComplete={resetToken ? "new-password" : "current-password"}
+                required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
             </label>
-            {error && <div className="alert error">{error}</div>}
+            {error && (
+              <div className="alert error" role="alert">
+                {error}
+              </div>
+            )}
             {localMessage && (
-              <div className="notice-box section-gap">{localMessage}</div>
+              <div className="notice-box section-gap" role="status">
+                {localMessage}
+              </div>
             )}
             <button className="btn primary login-submit" disabled={busy}>
               {busy ? "处理中…" : resetToken ? "保存新密码" : "进入工作空间"}
@@ -3308,6 +3329,7 @@ function Login({
               ].map(([id, name]) => (
                 <button
                   key={id}
+                  aria-pressed={username === id}
                   onClick={() => setUsername(id)}
                   className={username === id ? "selected" : ""}
                 >

@@ -5,6 +5,7 @@ coverage/
 .env.*
 !.env.example
 .local/
+.taste-skill/
 *.log
 *.tsbuildinfo
 playwright-report/

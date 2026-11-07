@@ -741,6 +741,36 @@ export function Overview({
             <span>● {T("订单金额", "Orders")}</span>
             <span>● {T("上述订单已收", "Received")}</span>
           </div>
+          <details className="chart-details">
+            <summary>{T("查看每月金额明细", "View monthly amounts")}</summary>
+            <div className="table-scroll">
+              <table>
+                <caption>
+                  {T(
+                    "近六个月订单与已收金额",
+                    "Orders and receipts for the last six months",
+                  )}{" "}
+                  · {currency}
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{T("月份", "Month")}</th>
+                    <th scope="col">{T("订单金额", "Orders")}</th>
+                    <th scope="col">{T("上述订单已收", "Received")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {months.map((m) => (
+                    <tr key={m.key}>
+                      <th scope="row">{m.key}</th>
+                      <td>{fmt(m.total, currency)}</td>
+                      <td>{fmt(m.paid, currency)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
         </section>
         <section className="card">
           <div className="card-head">

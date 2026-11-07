@@ -500,3 +500,227 @@
     transition: none;
   }
 }
+
+/* VESTA-230: readable entry, keyboard access and restrained interaction.
+   Keep these screen-only: existing document print styles remain independent. */
+@media screen {
+  .skip-link {
+    position: fixed;
+    left: 16px;
+    top: 12px;
+    z-index: 10000;
+    padding: 12px 20px;
+    border-radius: 6px;
+    background: #fff;
+    color: var(--green);
+    transform: translateY(-160%);
+  }
+  .skip-link:focus {
+    transform: translateY(0);
+  }
+  .login-story {
+    padding: 48px 64px;
+  }
+  .login-story:after {
+    content: none;
+  }
+  .login-story h1 {
+    font-size: clamp(32px, 3.3vw, 48px);
+    line-height: 1.4;
+    letter-spacing: -1px;
+    margin: 24px 0;
+  }
+  .login-story p {
+    font-size: 16px;
+    line-height: 1.9;
+  }
+  .login .eyebrow {
+    font-size: 12px;
+    letter-spacing: 1px;
+  }
+  .login-story > small {
+    font-size: 11px;
+    letter-spacing: 1px;
+  }
+  .login-stats {
+    gap: 0;
+    border-top: 1px solid #426454;
+    padding-top: 24px;
+    margin-top: 40px;
+  }
+  .login-stats > span {
+    flex: 1;
+    font-size: 24px;
+  }
+  .login-stats small {
+    font-size: 13px;
+    margin-top: 8px;
+  }
+  .login-panel {
+    background: #fbfcf9;
+    padding: 48px;
+  }
+  .login-card h2 {
+    font-size: 32px;
+    letter-spacing: -1px;
+  }
+  .login-card > p {
+    font-size: 14px;
+    line-height: 1.7;
+    margin-bottom: 32px;
+  }
+  .login-card label {
+    font-size: 14px;
+    color: var(--ink);
+  }
+  .login-card input {
+    height: 48px;
+    font-size: 16px;
+    padding-inline: 14px;
+  }
+  .login-submit {
+    height: 48px;
+    font-size: 15px;
+  }
+  .login-card > .link {
+    min-height: 44px;
+    text-align: left;
+  }
+  .demo-accounts {
+    margin-top: 20px;
+    padding-top: 24px;
+  }
+  .demo-accounts > small {
+    font-size: 12px;
+  }
+  .demo-accounts > div {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .demo-accounts button {
+    min-height: 64px;
+    font-size: 14px;
+    background: #fff;
+  }
+  .demo-accounts button small {
+    font-size: 12px;
+  }
+  .login-card .login-security {
+    font-size: 12px;
+    line-height: 1.7;
+  }
+  .login-security svg {
+    flex-shrink: 0;
+  }
+  .chart-details {
+    border-top: 1px solid var(--line);
+  }
+  .chart-details summary {
+    min-height: 44px;
+    padding: 12px 24px;
+    color: var(--green);
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .chart-details summary:focus-visible {
+    outline: 3px solid #399578;
+    outline-offset: -3px;
+  }
+  .chart-details caption {
+    text-align: left;
+    padding: 12px 24px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .chart-details td {
+    text-align: right;
+  }
+  .chart-details th {
+    white-space: nowrap;
+  }
+  .priority-tasks button:last-child {
+    border-bottom: 0;
+  }
+  .stage-flow > button:focus-visible {
+    outline-offset: -4px;
+  }
+  .btn:disabled {
+    cursor: not-allowed;
+  }
+}
+@media screen and (min-width: 761px) and (max-width: 1100px) {
+  .login-story {
+    padding: 40px 32px;
+  }
+  .login-panel {
+    padding: 32px;
+  }
+}
+@media screen and (max-width: 760px) {
+  .login-story {
+    padding: 24px;
+    min-height: auto;
+    gap: 24px;
+  }
+  .login-story h1 {
+    font-size: 28px;
+    margin: 0;
+  }
+  .login-panel {
+    padding: 32px 24px;
+  }
+  .login-card h2 {
+    font-size: 26px;
+  }
+  .btn,
+  .btn.compact,
+  .icon-btn,
+  .nav-item {
+    min-height: 44px;
+  }
+  .icon-btn {
+    min-width: 44px;
+  }
+  .heading-actions {
+    gap: 8px;
+  }
+  .toolbar input,
+  .toolbar select,
+  .crm-toolbar input,
+  .crm-toolbar select {
+    min-height: 44px;
+  }
+  .stage-flow > button:nth-child(3) {
+    border-right: 0;
+  }
+  .stage-flow > button:nth-child(-n + 3) {
+    border-bottom: 1px solid var(--line);
+  }
+  .chart-details summary {
+    padding-inline: 16px;
+  }
+}
+@media screen and (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .btn:not(:disabled),
+  .demo-accounts button {
+    transition:
+      transform 150ms ease,
+      background-color 150ms ease,
+      border-color 150ms ease;
+  }
+  .btn:not(:disabled):hover,
+  .demo-accounts button:hover {
+    transform: translateY(-1px);
+  }
+  .btn:not(:disabled):active,
+  .demo-accounts button:active {
+    transform: translateY(1px);
+  }
+  .product-card:focus-within {
+    border-color: var(--green);
+  }
+}
+@media screen {
+  .demo-accounts button small { color: #4d6957; }
+}
