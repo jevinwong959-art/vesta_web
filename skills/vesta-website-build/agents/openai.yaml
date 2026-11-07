@@ -1,0 +1,6 @@
+interface:
+  display_name: "vesta网站搭建"
+  short_description: "读取 Vesta 项目计划、进展文档和实际代码，恢复检查点并继续建设网站"
+  default_prompt: "使用 $vesta-website-build，核对项目计划、进展文档及 Git 改动，从当前检查点继续完成 Vesta 网站搭建。"
+policy:
+  allow_implicit_invocation: true
