@@ -1,3 +1,5 @@
+import Decimal from "decimal.js";
+import { PricingNote, displayCurrency, productPrice } from "./pricing";
 import React, { useState, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -282,6 +284,31 @@ function App() {
     }
   }, [user]);
   useEffect(() => {
+    if (!user) return;
+    let active = true;
+    const refreshProducts = async () => {
+      try {
+        const products = await api("data/products");
+        if (active)
+          setData((previous) =>
+            previous.products ? { ...previous, products } : previous,
+          );
+      } catch {
+        /* Existing values remain visible; explicit refresh reports network failures. */
+      }
+    };
+    void refreshProducts();
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") void refreshProducts();
+    }, 60000);
+    window.addEventListener("focus", refreshProducts);
+    return () => {
+      active = false;
+      clearInterval(timer);
+      window.removeEventListener("focus", refreshProducts);
+    };
+  }, [user, lang]);
+  useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(""), 5000);
     return () => clearTimeout(timer);
@@ -438,8 +465,13 @@ function App() {
           : []),
         { key: "category", label: "分类 / Category", value: p?.category },
         { key: "moq", label: "MOQ", type: "number", value: p?.moq || 100 },
-        { key: "price", label: "CNY", type: "number", value: p?.price || 0 },
-        { key: "usd", label: "USD", type: "number", value: p?.usd || 0 },
+        {
+          key: "price",
+          label: "人民币标准价 CNY（美元按汇率换算）",
+          type: "number",
+          value: p?.price || 0,
+        },
+
         ...(user?.role === "owner"
           ? [
               {
@@ -483,7 +515,13 @@ function App() {
           {
             product: source?.product || rows("products")[0]?.id,
             qty: source?.qty || 100,
-            price: 6.8,
+            price:
+              productPrice(
+                rows("products").find(
+                  (p) => p.id === (source?.product || rows("products")[0]?.id),
+                ),
+                source?.currency || displayCurrency(en),
+              ) ?? 0,
           },
         ],
       fields: [
@@ -497,7 +535,7 @@ function App() {
           key: "currency",
           label: "币种 / Currency",
           options: ["USD", "CNY"].map((v) => ({ value: v, label: v })),
-          value: q?.currency || source?.currency || "USD",
+          value: q?.currency || source?.currency || displayCurrency(en),
         },
         {
           key: "depositPct",
@@ -559,12 +597,14 @@ function App() {
           required: false,
           options: [
             { value: "", label: "最新参考值 / Latest reference" },
-            ...rows("rates").map((r) => ({
-              value: r.id,
-              label: `${r.date} · ${r.rate} · ${r.source}`,
-            })),
+            ...rows("rates")
+              .filter((r) => !r.invalid || r.id === q?.fx?.id)
+              .map((r) => ({
+                value: r.id,
+                label: `${r.date} · ${r.rate} · ${r.source}`,
+              })),
           ],
-          value: q?.fx?.id || "",
+          value: q?.fx?.id || rows("products")[0]?.pricingFx?.id || "",
         },
         { key: "terms", label: "贸易条款 / Terms", value: q?.terms || "FOB" },
         { key: "port", label: "装运港 / Port", value: q?.port || "Shanghai" },
@@ -1434,6 +1474,9 @@ function App() {
                 )}
               </div>
             )}
+          {page === "products" && (
+            <PricingNote product={rows("products")[0]} en={en} />
+          )}
           {page === "products" && !portal && (
             <section className="card">
               {table(
@@ -1467,8 +1510,13 @@ function App() {
                   </div>,
                   p.category,
                   <>
-                    {money(p.price)}
-                    <small className="sub">{money(p.usd, "USD")}</small>
+                    {productPrice(p, displayCurrency(en)) === null
+                      ? T("暂无美元参考价", "USD price unavailable")
+                      : money(
+                          productPrice(p, displayCurrency(en))!,
+                          displayCurrency(en),
+                        )}
+                    <small className="sub">{displayCurrency(en)}</small>
                   </>,
                   <>
                     {p.moq} 件<small className="sub">{p.lead} 天</small>
@@ -1582,12 +1630,12 @@ function App() {
                     </div>
                     {showMoney && (
                       <div className="product-price">
-                        {money(
-                          rows("customers")[0]?.currency === "CNY"
-                            ? p.price
-                            : p.usd,
-                          rows("customers")[0]?.currency || "USD",
-                        )}{" "}
+                        {productPrice(p, displayCurrency(en)) === null
+                          ? T("暂无美元参考价", "USD price unavailable")
+                          : money(
+                              productPrice(p, displayCurrency(en))!,
+                              displayCurrency(en),
+                            )}{" "}
                         <small>/ {T("件", "unit")}</small>
                       </div>
                     )}
@@ -2596,6 +2644,7 @@ function App() {
         <FormModal
           form={form}
           products={rows("products")}
+          rates={rows("rates")}
           orders={orderOptions}
           onClose={() => setForm(null)}
           onError={setError}
@@ -2763,6 +2812,7 @@ function App() {
             </>
           ) : aux.kind === "products" ? (
             <>
+              <PricingNote product={aux.row} en={en} />
               <img
                 className="detail-product-art"
                 src={
@@ -2780,8 +2830,15 @@ function App() {
                     en ? aux.row.specEn || aux.row.spec : aux.row.spec,
                   ],
                   ["MOQ", aux.row.moq],
-                  ["CNY", money(aux.row.price)],
-                  ["USD", money(aux.row.usd, "USD")],
+                  [
+                    displayCurrency(en),
+                    productPrice(aux.row, displayCurrency(en)) === null
+                      ? T("暂无美元参考价", "USD price unavailable")
+                      : money(
+                          productPrice(aux.row, displayCurrency(en))!,
+                          displayCurrency(en),
+                        ),
+                  ],
                   [
                     T("可用库存", "Available"),
                     aux.row.stock - aux.row.reserved,
@@ -3264,6 +3321,7 @@ function Login({
 function FormModal({
   form,
   products,
+  rates,
   orders,
   onClose,
   onError,
@@ -3271,6 +3329,7 @@ function FormModal({
 }: {
   form: Form;
   products: Row[];
+  rates: Row[];
   orders: { value: string; label: string }[];
   onClose: () => void;
   onError: (v: string) => void;
@@ -3285,6 +3344,20 @@ function FormModal({
     [allocations, setAllocations] = useState(form.allocations || []),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const quoteFx = values.fxId
+    ? rates.find((r) => r.id === values.fxId)
+    : products[0]?.pricingFx;
+  const canConvert =
+    quoteFx &&
+    !quoteFx.invalid &&
+    Number.isFinite(Number(quoteFx.rate)) &&
+    Number(quoteFx.rate) > 0;
+  const referenceUnit = (p: Row) =>
+    values.currency === "USD"
+      ? canConvert
+        ? new Decimal(p.price).div(quoteFx.rate).toDecimalPlaces(2).toNumber()
+        : null
+      : p.price;
   return (
     <div className="modal-backdrop">
       <section className="modal wide">
@@ -3326,9 +3399,51 @@ function FormModal({
                   {f.options ? (
                     <select
                       value={values[f.key]}
-                      onChange={(e) =>
-                        setValues({ ...values, [f.key]: e.target.value })
-                      }
+                      onChange={(e) => {
+                        if (
+                          form.quote &&
+                          f.key === "currency" &&
+                          values.currency !== e.target.value
+                        ) {
+                          const fx = values.fxId
+                            ? rates.find((r) => r.id === values.fxId)
+                            : products[0]?.pricingFx;
+                          if (
+                            !fx ||
+                            fx.invalid ||
+                            !Number.isFinite(Number(fx.rate)) ||
+                            Number(fx.rate) <= 0
+                          ) {
+                            setError(
+                              "没有有效汇率，无法切换报价币种 / No valid exchange rate",
+                            );
+                            return;
+                          }
+                          const convert = (n: any) =>
+                            (e.target.value === "USD"
+                              ? new Decimal(n || 0).div(fx.rate)
+                              : new Decimal(n || 0).times(fx.rate)
+                            )
+                              .toDecimalPlaces(2)
+                              .toNumber();
+                          setItems(
+                            items.map((i) => ({
+                              ...i,
+                              price: convert(i.price),
+                            })),
+                          );
+                          setValues({
+                            ...values,
+                            currency: e.target.value,
+                            fxId: fx.id,
+                            freight: convert(values.freight),
+                            fees: convert(values.fees),
+                            discount: convert(values.discount),
+                          });
+                          setError("");
+                        } else
+                          setValues({ ...values, [f.key]: e.target.value });
+                      }}
                       required={f.required !== false}
                     >
                       {f.options.map((o) => (
@@ -3437,6 +3552,34 @@ function FormModal({
             {form.quote && (
               <div className="quote-lines">
                 <h3>报价商品 / Quotation lines</h3>
+                <p className="muted">
+                  {canConvert
+                    ? "1 USD = " +
+                      quoteFx.rate +
+                      " CNY · " +
+                      quoteFx.date +
+                      " · " +
+                      quoteFx.source
+                    : "无可用汇率 / No valid exchange rate"}
+                </p>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={values.currency === "USD" && !canConvert}
+                  onClick={() =>
+                    setItems(
+                      items.map((i) => {
+                        const p = products.find((p) => p.id === i.product);
+                        return p ? { ...i, price: referenceUnit(p) } : i;
+                      }),
+                    )
+                  }
+                >
+                  按所选汇率采用当前产品参考价 / Apply reference prices
+                </button>
+                <p className="muted">
+                  已录入单价不会因后台汇率更新自动变化；采用参考价会替换本草稿商品单价。
+                </p>
                 <p className="notice-box">
                   合计 / Total:{" "}
                   {money(
@@ -3478,8 +3621,7 @@ function FormModal({
                               ? {
                                   product: p.id,
                                   qty: p.moq,
-                                  price:
-                                    values.currency === "USD" ? p.usd : p.price,
+                                  price: referenceUnit(p),
                                 }
                               : x,
                           ),
@@ -3518,7 +3660,7 @@ function FormModal({
                         type="number"
                         min="0"
                         step="0.01"
-                        value={i.price}
+                        value={i.price ?? ""}
                         onChange={(e) =>
                           setItems(
                             items.map((x, n) =>
@@ -3555,7 +3697,7 @@ function FormModal({
                         {
                           product: p.id,
                           qty: p.moq,
-                          price: values.currency === "USD" ? p.usd : p.price,
+                          price: referenceUnit(p),
                         },
                       ]);
                   }}

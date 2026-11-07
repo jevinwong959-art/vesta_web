@@ -7,7 +7,7 @@ export const templates: Record<string, string> = {
   orders:
     "externalId,customerExternalId,currency,total,paid,confirmedAt,eta,balanceDue\r\nDEMO-SO,DEMO-C01,CNY,1000,300,2026-10-01,2026-10-20,2026-10-27",
   products:
-    "sku,name,en,category,moq,price,usd,lead,spec,specEn,safe\r\nDEMO-NEW,演示产品,Demo Product,日用礼品,100,48,6.8,15,示例规格,Sample specification,100",
+    "sku,name,en,category,moq,price,lead,spec,specEn,safe\r\nDEMO-NEW,演示产品,Demo Product,日用礼品,100,48,15,示例规格,Sample specification,100",
   customers:
     "externalId,name,en,country,contact,email,currency,address\r\nDEMO-C01,演示客户,Demo Buyer,Singapore,Alex,buyer@example.test,USD,Demo address",
 };
@@ -56,7 +56,7 @@ const schemas = {
     safe: z.coerce.number().int().nonnegative().optional(),
     moq: z.coerce.number().int().positive().max(1e6),
     price: number,
-    usd: number,
+    usd: number.optional(),
     lead: z.coerce.number().int().positive().max(365),
   }),
   customers: z.object({

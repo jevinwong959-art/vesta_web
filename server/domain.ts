@@ -8,6 +8,7 @@ import Decimal from "decimal.js";
 import { RecordData, Store, read, transaction, uid } from "./db";
 import { User, allow } from "./auth";
 import { businessDay, businessNow } from "./clock";
+import { cataloguePricing } from "./pricing";
 import { latestRate, stale, refreshRates, chinaDay } from "./fx";
 
 const text = z.string().trim().min(1).max(500);
@@ -122,6 +123,7 @@ export async function listData(u: User, kind: string) {
     if (kind === "rates") allow(u, ["owner", "manager", "sales"]);
     if (kind === "settings") allow(u, ["owner", "manager"]);
     let rows = await db.all(kind);
+    if (kind === "products") rows = await cataloguePricing(db, rows);
     if (kind === "rates")
       rows = rows.map((r) => ({
         ...r,
@@ -278,7 +280,7 @@ export async function action(
             costReason: z.string().max(500).optional(),
             moq: qty,
             price: amount,
-            usd: amount,
+            usd: amount.optional(),
             cost: amount.optional(),
             lead: qty,
           })
@@ -491,6 +493,25 @@ export async function action(
         if (v.id && v.revisionOf) fail("草稿编辑与修订不能同时指定");
         if (new Set(v.items.map((i) => i.product)).size !== v.items.length)
           fail("同一商品请合并数量");
+        const fx =
+          v.currency === "USD"
+            ? v.fxId
+              ? await required(db, "rates", v.fxId)
+              : previous?.fx || (await latestRate(db))
+            : undefined;
+        if (v.currency === "USD" && !fx) fail("缺少可用汇率");
+        if (
+          fx &&
+          (fx.invalid ||
+            !Number.isFinite(Number(fx.rate)) ||
+            Number(fx.rate) <= 0 ||
+            (!fx.manual &&
+              fx.date >
+                new Date().toLocaleDateString("en-CA", {
+                  timeZone: "Asia/Shanghai",
+                })))
+        )
+          fail("汇率日期无效，请选择可用版本");
         const items = [];
         let total = new Decimal(0);
         for (const item of v.items) {
@@ -506,7 +527,10 @@ export async function action(
             specEn: p.specEn || "",
             unit: p.unit || "件",
             cost: p.cost,
-            listPrice: v.currency === "USD" ? p.usd : p.price,
+            listPrice:
+              v.currency === "USD"
+                ? money(new Decimal(p.price).div(fx!.rate))
+                : p.price,
             produced: 0,
             shipped: 0,
             delivered: 0,
@@ -516,23 +540,6 @@ export async function action(
         }
         total = total.plus(v.freight).plus(v.fees).minus(v.discount);
         if (total.lte(0) || total.gt(1e10)) fail("报价总额无效");
-        const fx =
-          v.currency === "USD"
-            ? v.fxId
-              ? await required(db, "rates", v.fxId)
-              : previous?.fx || (await latestRate(db))
-            : undefined;
-        if (v.currency === "USD" && !fx) fail("缺少可用汇率");
-        if (
-          fx &&
-          (fx.invalid ||
-            (!fx.manual &&
-              fx.date >
-                new Date().toLocaleDateString("en-CA", {
-                  timeZone: "Asia/Shanghai",
-                })))
-        )
-          fail("汇率日期无效，请选择可用版本");
         const customer = await required(db, "customers", v.customer);
         const group = revision?.group || previous?.group || uid("QG");
         const revisionNo = revision

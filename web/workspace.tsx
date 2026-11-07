@@ -77,11 +77,13 @@ export function PortalHome({
   );
 }
 
-export const fmt = (n: number, c = "CNY") =>
-  new Intl.NumberFormat(c === "CNY" ? "zh-CN" : "en-US", {
-    style: "currency",
-    currency: c,
-  }).format(n || 0);
+export const fmt = (n: number | null, c = "CNY") =>
+  n == null
+    ? "—"
+    : new Intl.NumberFormat(c === "CNY" ? "zh-CN" : "en-US", {
+        style: "currency",
+        currency: c,
+      }).format(n || 0);
 const date = (v?: string) =>
   v
     ? new Date(v).toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" })

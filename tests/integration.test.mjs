@@ -1066,3 +1066,114 @@ test("formal quote CSV is public-field only, scoped, and ordinary databases cann
   );
   assert(preview.rows[0].errors.some((e) => e.column === "cost"));
 });
+
+test("catalogue USD follows reference FX while manual rates and saved quotations remain independent", async () => {
+  const backup = (
+    await client.query("SELECT id,data FROM records WHERE kind='rates'")
+  ).rows;
+  const put = async (r) =>
+    client.query(
+      "INSERT INTO records(kind,id,data) VALUES('rates',$1,$2) ON CONFLICT(kind,id) DO UPDATE SET data=excluded.data",
+      [r.id, JSON.stringify(r)],
+    );
+  try {
+    await client.query("DELETE FROM records WHERE kind='rates'");
+    const date = new Date().toLocaleDateString("en-CA", {
+      timeZone: "Asia/Shanghai",
+    });
+    await put({
+      id: "PRICE-REF-1",
+      base: "USD",
+      quote: "CNY",
+      rate: "7.5",
+      date,
+      source: "test reference",
+      fetchedAt: "2026-01-01T00:00:00Z",
+    });
+    const p = await act("owner", "product-save", {
+      sku: "PRICE-CHECK",
+      name: "汇率测试",
+      en: "FX test",
+      category: "test",
+      moq: 100,
+      price: 48,
+      usd: 99,
+      cost: 30,
+      lead: 10,
+    });
+    const get = async (who) =>
+      (await request(who, "data/products")).find((x) => x.id === p.id);
+    for (const role of ["owner", "manager", "sales", "buyer"]) {
+      const row = await get(role);
+      assert.equal(row.usd, 6.4);
+      assert.equal(row.price, 48);
+      assert.equal(row.pricingFx.id, "PRICE-REF-1");
+      if (role !== "owner") assert(!("cost" in row));
+    }
+    const q = await act("sales", "quote-save", {
+      customer: "C-001",
+      currency: "USD",
+      items: [{ product: p.id, qty: 100, price: 6.4 }],
+      depositPct: 30,
+      valid: "2099-01-01",
+      eta: "2099-02-01",
+    });
+    assert.equal(q.items[0].listPrice, 6.4);
+    await put({
+      id: "PRICE-REF-2",
+      base: "USD",
+      quote: "CNY",
+      rate: "8",
+      date,
+      source: "test reference",
+      fetchedAt: "2026-02-01T00:00:00Z",
+    });
+    assert.equal((await get("buyer")).usd, 6);
+    const saved = (await request("sales", "data/quotes")).find(
+      (x) => x.id === q.id,
+    );
+    assert.equal(saved.fx.id, "PRICE-REF-1");
+    assert.equal(saved.items[0].price, 6.4);
+    const manual = await act("owner", "fx-manual", {
+      rate: 9,
+      date,
+      reason: "only for a selected quotation",
+    });
+    assert.equal((await get("buyer")).usd, 6);
+    const manualQ = await act("sales", "quote-save", {
+      customer: "C-001",
+      currency: "USD",
+      items: [{ product: p.id, qty: 100, price: 5.33 }],
+      depositPct: 30,
+      valid: "2099-01-01",
+      eta: "2099-02-01",
+      fxId: manual.id,
+    });
+    assert.equal(manualQ.items[0].listPrice, 5.33);
+    await request("buyer", "data/rates", undefined, 403);
+    await client.query("DELETE FROM records WHERE kind='rates'");
+    await put({ id: "INVALID", rate: "0", date, simulated: true });
+    await put({
+      id: "FUTURE",
+      rate: "6",
+      date: "2999-01-01",
+      fetchedAt: "2999-01-01",
+    });
+    assert.equal((await get("buyer")).usd, null);
+    assert.equal((await get("buyer")).price, 48);
+    await put({
+      id: "OFFLINE",
+      rate: "7.5",
+      date: "2020-01-01",
+      source: "SIMULATED",
+      simulated: true,
+    });
+    const fallback = await get("buyer");
+    assert.equal(fallback.usd, 6.4);
+    assert.equal(fallback.pricingFx.simulated, true);
+    assert.equal(fallback.pricingFx.stale, true);
+  } finally {
+    await client.query("DELETE FROM records WHERE kind='rates'");
+    for (const r of backup) await put(r.data);
+  }
+});

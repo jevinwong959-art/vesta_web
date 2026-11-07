@@ -1,3 +1,4 @@
+import { PricingNote, displayCurrency } from "./pricing";
 import { businessDay, businessNow } from "./clock";
 import React, { useState, useEffect, useRef } from "react";
 import { X, Plus, Search } from "lucide-react";
@@ -615,7 +616,7 @@ export function RequestDialog({
           : [],
     ),
     [customer, setCustomer] = useState(customers[0]?.id || ""),
-    [currency, setCurrency] = useState(customers[0]?.currency || "CNY"),
+    [currency, setCurrency] = useState(displayCurrency(en)),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   return (
@@ -657,6 +658,7 @@ export function RequestDialog({
           }
         }}
       >
+        <PricingNote product={products[0]} en={en} />
         <div className="notice-box">
           {T(
             "申请不是正式订单；确认已审批并发布的报价后才生成订单。",
@@ -671,10 +673,6 @@ export function RequestDialog({
                 value={customer}
                 onChange={(e) => {
                   setCustomer(e.target.value);
-                  setCurrency(
-                    customers.find((c) => c.id === e.target.value)?.currency ||
-                      "CNY",
-                  );
                 }}
               >
                 {customers.map((c) => (
@@ -769,7 +767,9 @@ export function RequestDialog({
               </label>
               <span>
                 {fmt(
-                  i.qty * (currency === "USD" ? p?.usd : p?.price),
+                  currency === "USD" && p?.usd == null
+                    ? null
+                    : i.qty * (currency === "USD" ? p?.usd : p?.price),
                   currency,
                 )}
               </span>
@@ -804,10 +804,12 @@ export function RequestDialog({
           )}
           :{" "}
           {fmt(
-            items.reduce((s, i) => {
-              const p = products.find((p) => p.id === i.product);
-              return s + i.qty * (currency === "USD" ? p?.usd : p?.price);
-            }, 0),
+            currency === "USD" && !products[0]?.pricingFx
+              ? null
+              : items.reduce((s, i) => {
+                  const p = products.find((p) => p.id === i.product);
+                  return s + i.qty * (currency === "USD" ? p?.usd : p?.price);
+                }, 0),
             currency,
           )}
         </p>

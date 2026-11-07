@@ -11,12 +11,22 @@ export const chinaDay = (date = new Date()) =>
 export const stale = (r: RecordData, now = new Date()) =>
   Math.floor((Date.parse(chinaDay(now)) - Date.parse(r.date)) / 86400000) > 7;
 export async function latestRate(db: Store) {
-  const rates = await db.all("rates");
+  const rates = (await db.all("rates")).filter(
+    (r) =>
+      !r.invalid &&
+      Number.isFinite(Number(r.rate)) &&
+      Number(r.rate) > 0 &&
+      r.date <= chinaDay(),
+  );
   const automatic = rates
     .filter(
       (x) => !x.manual && !x.simulated && !x.invalid && x.date <= chinaDay(),
     )
-    .sort((a, b) => b.fetchedAt.localeCompare(a.fetchedAt));
+    .sort((a, b) =>
+      String(b.fetchedAt || b.date).localeCompare(
+        String(a.fetchedAt || a.date),
+      ),
+    );
   return automatic[0] || rates.filter((x) => x.simulated).at(-1);
 }
 let refreshing: Promise<RecordData> | undefined;
