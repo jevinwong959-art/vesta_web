@@ -12,7 +12,8 @@
     "demo:data": "tsc -p tsconfig.server.json && node scripts/demo-data.mjs",
     "db": "node scripts/database.mjs",
     "check": "pnpm build && pnpm test",
-    "skill:install": "node scripts/install-skill.mjs"
+    "skill:install": "node scripts/install-skill.mjs",
+    "demo:reference": "pnpm build && node scripts/reference-data.mjs --serve"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.0",

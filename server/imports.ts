@@ -4,6 +4,7 @@ import { User, allow, digest } from "./auth";
 import { Store, transaction } from "./db";
 
 export const templates: Record<string, string> = {
+  orders: "externalId,customerExternalId,currency,total,paid,confirmedAt,eta,balanceDue\r\nDEMO-SO,DEMO-C01,CNY,1000,300,2026-10-01,2026-10-20,2026-10-27",
   products:
     "sku,name,en,category,moq,price,usd,lead\r\nDEMO-NEW,演示产品,Demo Product,日用礼品,100,48,6.8,15",
   customers:

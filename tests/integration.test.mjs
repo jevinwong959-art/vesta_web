@@ -849,3 +849,197 @@ test("existing role migration retains identity, scope and history and runs once"
   ).rows;
   assert.equal(audit.length, 1);
 });
+
+test("prototype multi-item requests preserve intent and convert every line with frozen specifications", async () => {
+  const p = (await request("owner", "data/products")).find(
+    (p) => p.id === "P-001",
+  );
+  await act("owner", "product-save", {
+    ...p,
+    spec: "500 mL • Ivory",
+    specEn: "500 mL • Ivory",
+    safe: 500,
+  });
+  await act("owner", "product-save", { ...p, cost: p.cost + 1 }, 400);
+  const req = await act("buyer", "inquiry-create", {
+    items: [
+      { product: "P-001", qty: 100 },
+      { product: "P-002", qty: 50 },
+    ],
+    type: "order_request",
+    currency: "CNY",
+    eta: "2027-02-01",
+    address: "Fictional destination",
+    note: "two products",
+  });
+  assert.equal(req.items.length, 2);
+  assert.equal(req.type, "order_request");
+  assert.equal(req.customer, "C-001");
+  await act(
+    "buyer",
+    "inquiry-create",
+    { items: [{ product: "P-001", qty: 1 }], eta: "2027-02-01" },
+    400,
+  );
+  await act(
+    "buyer",
+    "inquiry-create",
+    {
+      items: [
+        { product: "P-001", qty: 100 },
+        { product: "P-001", qty: 100 },
+      ],
+      eta: "2027-02-01",
+    },
+    400,
+  );
+  const q = await act("sales", "quote-save", {
+    customer: "C-001",
+    inquiry: req.id,
+    items: req.items.map((i) => ({
+      ...i,
+      price: i.product === "P-001" ? 48 : 128,
+    })),
+    currency: "CNY",
+    depositPct: 30,
+    eta: "2027-02-01",
+    valid: "2027-01-01",
+  });
+  assert.equal(q.items.length, 2);
+  assert.equal(q.balanceDue, "2027-02-08");
+  assert.equal(q.items[0].spec, "500 mL • Ivory");
+  await act("sales", "quote-submit", { id: q.id });
+  await act("manager", "quote-decide", {
+    id: q.id,
+    approve: true,
+    note: "approved",
+  });
+  await act("sales", "quote-publish", { id: q.id });
+  const o = await act("buyer", "quote-accept", { id: q.id });
+  assert.equal(o.total, 11200);
+  assert.equal(o.balanceDue, q.balanceDue);
+  assert(o.confirmedAt);
+  await act("owner", "product-save", {
+    ...p,
+    spec: "Changed after order",
+    safe: 600,
+  });
+  const detail = await request("buyer", "detail/orders/" + o.id);
+  assert.equal(detail.items[0].spec, "500 mL • Ivory");
+  assert.deepEqual(detail.timeline, []);
+  assert(!JSON.stringify(detail).includes('"cost"'));
+  assert(!JSON.stringify(detail).includes("approver"));
+  await request("buyer2", "detail/orders/" + o.id, undefined, 404);
+});
+
+test("order detail exposes only this order's verified allocation and preserves actual receipt date", async () => {
+  const o = (await request("owner", "data/orders")).find(
+    (o) => o.total === 11200,
+  );
+  const r = await act("sales", "receipt-create", {
+    transaction: "PARITY-RECEIPT",
+    currency: "CNY",
+    amount: 1000,
+    receivedAt: "2026-11-01",
+    note: "private bank information",
+    allocations: [{ order: o.id, amount: 700 }],
+  });
+  assert.equal(
+    (await request("buyer", "detail/orders/" + o.id)).payments.length,
+    0,
+  );
+  await act("owner", "receipt-verify", { id: r.id });
+  const d = await request("buyer", "detail/orders/" + o.id);
+  assert.equal(d.payments[0].amount, 700);
+  assert.equal(d.payments[0].receivedAt, "2026-11-01");
+  assert(!JSON.stringify(d).includes("private bank information"));
+  assert(!JSON.stringify(d).includes("PARITY-RECEIPT"));
+  await act("owner", "receipt-reverse", {
+    id: r.id,
+    reason: "fictional correction",
+  });
+  assert.equal(
+    (await request("buyer", "detail/orders/" + o.id)).payments.length,
+    0,
+  );
+});
+
+test("contract metadata, private upload, signing and version groups retain independent histories", async () => {
+  const o = (await request("owner", "data/orders")).find(
+    (o) => o.total === 11200,
+  );
+  const c = await act("sales", "contract-save", {
+    order: o.id,
+    name: "Test procurement contract",
+    valid: "2027-12-31",
+    terms: "Demo only",
+  });
+  assert.equal(c.version, 1);
+  assert.equal(c.status, "draft");
+  await act(
+    "sales",
+    "contract-sign",
+    { id: c.id, signedAt: "2026-11-07" },
+    400,
+  );
+  const body = {
+    order: o.id,
+    contract: c.id,
+    name: "demo.pdf",
+    content: Buffer.from("%PDF-1.4\nDemo archive").toString("base64"),
+  };
+  const attached = await request("sales", "contracts", body, 201);
+  assert.equal(attached.id, c.id);
+  assert.equal(attached.version, 1);
+  await act("sales", "contract-sign", { id: c.id, signedAt: "2026-11-07" });
+  await request("sales", "contracts", body, 400);
+  const revised = await act("sales", "contract-save", {
+    order: o.id,
+    name: c.name,
+    valid: "2028-01-01",
+    revisionOf: c.id,
+  });
+  assert.equal(revised.version, 2);
+  assert.equal(revised.group, c.group);
+  const other = await act("sales", "contract-save", {
+    order: o.id,
+    name: "Independent contract",
+    valid: "2028-01-01",
+  });
+  assert.equal(other.version, 1);
+  assert.notEqual(other.group, c.group);
+  await request("buyer2", "detail/contracts/" + c.id, undefined, 404);
+});
+
+test("balance reminders use agreed payment due dates, and authorized search omits other customers", async () => {
+  const o = (await request("owner", "data/orders")).find(
+    (o) => o.total === 11200,
+  );
+  await client.query(
+    "UPDATE records SET data=data || $1::jsonb WHERE kind='orders' AND id=$2",
+    [JSON.stringify({ eta: "2020-01-01", balanceDue: "2099-01-01" }), o.id],
+  );
+  await act("owner", "scan", {});
+  assert(
+    !(await request("owner", "data/notifications")).some(
+      (n) =>
+        n.entity === o.id && !n.resolved && n.title.includes("Payment due"),
+    ),
+  );
+  await client.query(
+    "UPDATE records SET data=data || $1::jsonb WHERE kind='orders' AND id=$2",
+    [JSON.stringify({ eta: "2099-01-01", balanceDue: "2020-01-01" }), o.id],
+  );
+  await act("owner", "scan", {});
+  assert(
+    (await request("owner", "data/notifications")).some(
+      (n) =>
+        n.entity === o.id && !n.resolved && n.title.includes("Payment due"),
+    ),
+  );
+  assert.equal((await request("sales", "search?q=C-002")).length, 0);
+  await request("buyer", "search?q=anything", undefined, 403);
+  const productResults = await request("sales", "search?q=VT-TM500");
+  assert(productResults.length);
+  assert(!JSON.stringify(productResults).includes("cost"));
+});

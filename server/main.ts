@@ -7,6 +7,7 @@ import {
   Get,
   Post,
   Param,
+  Query,
   Body,
   Req,
   Res,
@@ -26,10 +27,12 @@ import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import { pool, migrate, read, transaction, uid } from "./db";
+import { referenceDate } from "./clock";
 import { seed } from "./seed";
 import { authenticate, login, allow, digest, hashPassword, User } from "./auth";
 import { action, listData, canCustomer, scanReminders } from "./domain";
 import { scheduledFx } from "./fx";
+import { detailView, searchView, businessExport } from "./views";
 import { templates, previewImport, commitImport } from "./imports";
 
 @Catch()
@@ -60,7 +63,12 @@ const attempts = new Map<string, { n: number; at: number }>();
 class Api {
   @Get("health") async health() {
     await pool.query("SELECT 1");
-    return { ok: true, mode: "local-demo", database: "PostgreSQL" };
+    return {
+      ok: true,
+      mode: "local-demo",
+      database: "PostgreSQL",
+      referenceDate,
+    };
   }
   @Post("login") async signIn(
     @Body() body: unknown,
@@ -114,6 +122,16 @@ class Api {
     @Req() req: Request,
   ) {
     return listData(await authenticate(req.cookies.vesta_session), kind);
+  }
+  @Get("detail/:kind/:id") async detail(
+    @Param("kind") kind: string,
+    @Param("id") id: string,
+    @Req() req: Request,
+  ) {
+    return detailView(await authenticate(req.cookies.vesta_session), kind, id);
+  }
+  @Get("search") async search(@Query("q") q: string, @Req() req: Request) {
+    return searchView(await authenticate(req.cookies.vesta_session), q || "");
   }
   @Post("actions/:name") async act(
     @Param("name") name: string,
@@ -328,6 +346,7 @@ class Api {
     const v = z
       .object({
         order: z.string(),
+        contract: z.string().optional(),
         name: z.string().min(1).max(100),
         content: z.string().max(7 * 1024 * 1024),
         status: z.enum(["draft", "signed"]).default("draft"),
@@ -344,7 +363,18 @@ class Api {
       const o = await db.get("orders", v.order);
       if (!o || !(await canCustomer(db, u, o.customer)))
         throw new ForbiddenException();
-      const id = uid("CT");
+      const archive = v.contract
+        ? await db.get("contracts", v.contract)
+        : undefined;
+      if (
+        v.contract &&
+        (!archive ||
+          archive.order !== o.id ||
+          archive.status === "signed" ||
+          archive.bytes)
+      )
+        throw new BadRequestException("请为已上传或已签署合同创建新版本");
+      const id = archive?.id || uid("CT");
       await mkdir(resolve(process.env.UPLOAD_DIR || ".local/uploads"), {
         recursive: true,
       });
@@ -356,15 +386,18 @@ class Api {
         },
       );
       const c = await db.put("contracts", {
+        ...archive,
         id,
+        group: archive?.group || id,
         order: o.id,
         customer: o.customer,
-        name: v.name,
+        name: archive?.name || v.name,
+        fileName: v.name,
         status: v.status,
         bytes: buffer.length,
-        version:
-          (await db.all("contracts")).filter((c) => c.order === o.id).length +
-          1,
+        version: archive?.version || 1,
+        amount: archive?.amount || o.total,
+        currency: o.currency,
         at: new Date().toISOString(),
       });
       await db.audit(u.id, "contract-upload", id);
@@ -381,6 +414,7 @@ class Api {
     const c = await read((db) => db.get("contracts", id));
     if (
       !c ||
+      !c.bytes ||
       !/^CT-[a-z0-9-]+$/.test(id) ||
       !(await read((db) => canCustomer(db, u, c.customer)))
     )
@@ -404,24 +438,7 @@ class Api {
     if (!["customers", "products", "orders", "quotes"].includes(kind))
       throw new BadRequestException();
     const rows = await listData(u, kind);
-    const keys = Array.from(
-      new Set(
-        rows.flatMap((r) =>
-          Object.keys(r).filter((k) => typeof r[k] !== "object"),
-        ),
-      ),
-    );
-    const cell = (v: any) =>
-      '"' +
-      String(v ?? "")
-        .replace(/^[\s]*[=+@-]/, "'$&")
-        .replaceAll('"', '""') +
-      '"';
-    const csv =
-      "\uFEFF" +
-      [keys, ...rows.map((r) => keys.map((k) => r[k]))]
-        .map((row) => row.map(cell).join(","))
-        .join("\r\n");
+    const csv = businessExport(kind, rows);
     await transaction((db) => db.audit(u.id, "export", kind));
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="${kind}.csv"`);

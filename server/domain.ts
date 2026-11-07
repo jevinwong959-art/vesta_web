@@ -7,6 +7,7 @@ import { z } from "zod";
 import Decimal from "decimal.js";
 import { RecordData, Store, read, transaction, uid } from "./db";
 import { User, allow } from "./auth";
+import { businessDay, businessNow } from "./clock";
 import { latestRate, stale, refreshRates, chinaDay } from "./fx";
 
 const text = z.string().trim().min(1).max(500);
@@ -62,6 +63,8 @@ export function sanitize(value: any, u: User): any {
         "approvalLog",
         "submittedBy",
         "risk",
+        "riskReasons",
+        "costHistory",
         "owner",
         "lastFollow",
       ].includes(k)
@@ -152,6 +155,14 @@ export async function listData(u: User, kind: string) {
         }));
       }
     }
+    if (kind === "customers" && u.role === "customer") {
+      for (const c of rows) {
+        const person = (
+          await db.client.query("SELECT name FROM users WHERE id=$1", [c.owner])
+        ).rows[0];
+        c.assignedContact = { name: person?.name || "" };
+      }
+    }
     const selected: RecordData[] = [];
     for (const r of rows) {
       if (kind === "mails" && r.sensitive && u.role !== "owner") continue;
@@ -212,6 +223,8 @@ export async function action(
             industry: z.string().max(80).optional(),
             tier: z.enum(["A", "B", "C"]).optional(),
             phone: z.string().max(80).optional(),
+            tags: z.array(z.string().max(40)).max(20).optional(),
+            since: day.optional(),
           })
           .parse(b);
         if (v.id && !(await canCustomer(db, u, v.id)))
@@ -235,6 +248,8 @@ export async function action(
           ...v,
           id: v.id || uid("C"),
           owner,
+          since: previous?.since || v.since || businessDay(),
+          createdAt: previous?.createdAt || new Date().toISOString(),
           lastFollow: previous?.lastFollow || new Date().toISOString(),
         });
         break;
@@ -248,6 +263,11 @@ export async function action(
             name: text,
             en: text,
             category: text,
+            spec: z.string().max(500).optional(),
+            specEn: z.string().max(500).optional(),
+            safe: z.coerce.number().int().nonnegative().optional(),
+            warehouse: z.string().max(80).optional(),
+            costReason: z.string().max(500).optional(),
             moq: qty,
             price: amount,
             usd: amount,
@@ -264,6 +284,13 @@ export async function action(
         const old = v.id ? await required(db, "products", v.id) : undefined;
         if (u.role !== "owner" && v.cost !== undefined)
           throw new ForbiddenException("仅管理人员可维护成本");
+        if (
+          old &&
+          v.cost !== undefined &&
+          v.cost !== old.cost &&
+          !v.costReason?.trim()
+        )
+          fail("调整成本必须填写原因");
         out = await db.put("products", {
           ...old,
           ...v,
@@ -275,6 +302,18 @@ export async function action(
           stock: old?.stock || 0,
           reserved: old?.reserved || 0,
           unit: "件",
+          costHistory:
+            v.cost !== undefined && v.cost !== old?.cost
+              ? [
+                  ...(old?.costHistory || []),
+                  {
+                    actor: u.id,
+                    at: new Date().toISOString(),
+                    cost: v.cost,
+                    reason: v.costReason || "初始成本",
+                  },
+                ]
+              : old?.costHistory || [],
         });
         break;
       }
@@ -283,8 +322,16 @@ export async function action(
         const v = z
           .object({
             customer: text.optional(),
-            product: text,
-            qty,
+            product: text.optional(),
+            qty: qty.optional(),
+            items: z
+              .array(z.object({ product: text, qty }))
+              .min(1)
+              .max(100)
+              .optional(),
+            type: z.enum(["inquiry", "order_request"]).default("inquiry"),
+            currency: z.enum(["CNY", "USD"]).optional(),
+            address: z.string().max(500).optional(),
             eta: day,
             note: z.string().max(2000).default(""),
           })
@@ -292,14 +339,99 @@ export async function action(
         const customer = u.role === "customer" ? u.customer! : v.customer!;
         if (!(await canCustomer(db, u, customer)))
           throw new ForbiddenException();
-        const p = await required(db, "products", v.product);
-        if (v.qty < p.moq) fail("数量低于 MOQ");
+        const c = await required(db, "customers", customer);
+        const input =
+          v.items ||
+          (v.product && v.qty ? [{ product: v.product, qty: v.qty }] : []);
+        if (
+          !input.length ||
+          new Set(input.map((i) => i.product)).size !== input.length
+        )
+          fail("请选择商品并合并重复商品");
+        const items = [];
+        for (const i of input) {
+          const p = await required(db, "products", i.product);
+          if (i.qty < p.moq) fail("数量低于 MOQ");
+          items.push({
+            ...i,
+            name: p.name,
+            en: p.en,
+            sku: p.sku,
+            spec: p.spec,
+            specEn: p.specEn,
+          });
+        }
         out = await db.put("inquiries", {
           ...v,
-          id: uid("IQ"),
+          items,
           customer,
+          id: uid("IQ"),
+          currency: v.currency || c.currency,
+          address: v.address || c.address,
           status: "new",
+          createdBy: u.id,
           createdAt: new Date().toISOString(),
+        });
+        break;
+      }
+      case "inquiry-close": {
+        allow(u, salesRoles);
+        const i = await scoped(db, u, "inquiries", text.parse(b.id));
+        if (i.status !== "new") fail("仅未受理申请可关闭");
+        out = await db.put("inquiries", {
+          ...i,
+          status: "closed",
+          closeReason: text.parse(b.reason),
+        });
+        break;
+      }
+      case "contract-save": {
+        allow(u, salesRoles);
+        const v = z
+          .object({
+            order: text,
+            name: text,
+            valid: day,
+            terms: z.string().max(2000).default(""),
+            revisionOf: text.optional(),
+          })
+          .parse(b);
+        const o = await scoped(db, u, "orders", v.order);
+        const old = v.revisionOf
+          ? await scoped(db, u, "contracts", v.revisionOf)
+          : undefined;
+        if (old && old.order !== o.id) fail("合同版本不能更换订单");
+        const group = old?.group || old?.id || uid("CG");
+        out = await db.put("contracts", {
+          ...v,
+          id: uid("CT"),
+          group,
+          customer: o.customer,
+          currency: o.currency,
+          amount: o.total,
+          status: "draft",
+          version:
+            1 +
+            Math.max(
+              0,
+              ...(await db.all("contracts"))
+                .filter((c) => (c.group || c.id) === group)
+                .map((c) => c.version),
+            ),
+          at: new Date().toISOString(),
+        });
+        break;
+      }
+      case "contract-sign": {
+        allow(u, salesRoles);
+        const c = await scoped(db, u, "contracts", text.parse(b.id));
+        if (!c.bytes) fail("请先上传签署件");
+        if (c.status === "signed") return c;
+        out = await db.put("contracts", {
+          ...c,
+          status: "signed",
+          signedAt: day.parse(b.signedAt),
+          signedBy: u.id,
         });
         break;
       }
@@ -317,6 +449,8 @@ export async function action(
               .min(1)
               .max(100),
             depositPct: z.coerce.number().min(0).max(100),
+            balanceDue: day.optional(),
+            paymentTerms: z.string().max(1000).optional(),
             valid: day,
             eta: day,
             fxId: text.optional(),
@@ -358,6 +492,9 @@ export async function action(
             name: p.name,
             en: p.en,
             sku: p.sku,
+            spec: p.spec || "",
+            specEn: p.specEn || "",
+            unit: p.unit || "件",
             cost: p.cost,
             listPrice: v.currency === "USD" ? p.usd : p.price,
             produced: 0,
@@ -401,6 +538,13 @@ export async function action(
           id: previous?.id || uid("QT"),
           group,
           revision: revisionNo,
+          balanceDue:
+            v.balanceDue ||
+            new Date(Date.parse(v.eta + "T00:00:00Z") + 7 * 86400000)
+              .toISOString()
+              .slice(0, 10),
+          paymentTerms:
+            v.paymentTerms || `预付 ${v.depositPct}%，余款于约定日期结清`,
           items,
           total: money(total),
           fx,
@@ -417,7 +561,7 @@ export async function action(
         allow(u, salesRoles);
         const q = await scoped(db, u, "quotes", text.parse(b.id));
         if (q.status !== "draft") fail("仅草稿可提交");
-        if (q.valid < chinaDay()) fail("报价已过期");
+        if (q.valid < businessDay()) fail("报价已过期");
         if (q.items.some((i: any) => i.cost == null))
           fail("存在未核定成本，请管理人员维护");
         if (q.fx && stale(q.fx) && !q.fx.confirmedBy)
@@ -463,6 +607,16 @@ export async function action(
           approvers,
           step: 0,
           risk,
+          riskReasons: [
+            converted.gte(rule.riskAmount) ? "金额超过审批阈值" : "",
+            q.items.some((i: any) => i.price < i.listPrice * rule.discount)
+              ? "售价低于折扣阈值"
+              : "",
+            converted.minus(cost).div(converted).lt(rule.margin)
+              ? "需管理复核定价"
+              : "",
+            q.depositPct < rule.depositPct ? "预付款比例不足" : "",
+          ].filter(Boolean),
           submittedAt: new Date().toISOString(),
           stepStartedAt: new Date().toISOString(),
         });
@@ -520,7 +674,7 @@ export async function action(
         const q = await scoped(db, u, "quotes", text.parse(b.id));
         const existing = (await db.all("orders")).find((o) => o.quote === q.id);
         if (existing) return existing;
-        if (q.status !== "approved" || !q.published || q.valid < chinaDay())
+        if (q.status !== "approved" || !q.published || q.valid < businessDay())
           fail("报价未发布、已过期或已作废");
         if ((await db.all("orders")).some((o) => o.quoteGroup === q.group))
           fail("同一报价系列已成交");
@@ -529,6 +683,7 @@ export async function action(
           id: uid("SO"),
           quote: q.id,
           quoteGroup: q.group,
+          confirmedAt: new Date().toISOString(),
           status: "confirmed",
           released: false,
           paid: 0,
@@ -551,6 +706,7 @@ export async function action(
         const v = z
           .object({
             transaction: text,
+            receivedAt: day.optional(),
             currency: z.enum(["CNY", "USD"]),
             amount: amount.refine((x) => x > 0),
             allocations: z
@@ -664,6 +820,9 @@ export async function action(
             qty,
             carrier: text.optional(),
             tracking: text.optional(),
+            mode: z.enum(["express", "sea", "pickup"]).default("express"),
+            container: z.string().max(100).optional(),
+            eta: day.optional(),
           })
           .parse(b);
         const o = await scoped(db, u, "orders", v.id);
@@ -683,6 +842,7 @@ export async function action(
         if (ship) {
           text.parse(v.carrier);
           text.parse(v.tracking);
+          if (v.mode === "sea" && !v.container?.trim()) fail("海运请填写柜号");
           if (i.shipped + v.qty > i.produced) fail("发货超过已生产数量");
           if (p.stock < v.qty || p.reserved < v.qty) fail("预留库存不足");
           i.shipped += v.qty;
@@ -696,6 +856,9 @@ export async function action(
             qty: v.qty,
             carrier: v.carrier,
             tracking: v.tracking,
+            mode: v.mode,
+            container: v.container,
+            eta: v.eta,
             delivered: false,
             at: new Date().toISOString(),
           });
@@ -740,7 +903,15 @@ export async function action(
               ? "completed"
               : "confirmed",
         });
-        out = await db.put("shipments", { ...s, delivered: true });
+        out = await db.put("shipments", {
+          ...s,
+          delivered: true,
+          deliveredAt: b.deliveredAt ? day.parse(b.deliveredAt) : businessDay(),
+          deliveryNote: z
+            .string()
+            .max(1000)
+            .parse(b.note || ""),
+        });
         break;
       }
       case "follow-create": {
@@ -1018,7 +1189,7 @@ export async function action(
 export async function scanReminders() {
   return transaction(async (db) => {
     const rule = await required(db, "settings", "rules");
-    const now = Date.now();
+    const now = businessNow().getTime();
     let added = 0;
     const candidates: any[] = [];
     for (const c of await db.all("customers")) {
@@ -1072,13 +1243,13 @@ export async function scanReminders() {
             : Date.parse(o.lastFollow || o.createdAt) +
               rule.orderDays * 86400000,
         });
-        if (o.paid < o.total)
+        if (o.paid < o.total && o.balanceDue)
           candidates.push({
             customer: o.customer,
             entity: o.id,
             recipient: "owner",
-            title: "交期已到，核对尾款 / Payment follow-up",
-            due: Date.parse(o.eta + "T09:00:00+08:00"),
+            title: "尾款到期，核对回款 / Payment due",
+            due: Date.parse(o.balanceDue + "T09:00:00+08:00"),
           });
       }
     const activeKeys = new Set<string>();

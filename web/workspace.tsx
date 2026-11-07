@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import { businessNow, businessDay } from "./clock";
+import React, { useState, useEffect } from "react";
 import {
   Users,
   Check,
@@ -194,6 +195,7 @@ export function Customers({
   onEdit,
   onOrder,
   onImport,
+  openCustomer,
 }: {
   data: Data;
   user: any;
@@ -201,10 +203,15 @@ export function Customers({
   onEdit: (c: Row) => void;
   onOrder: (o: Row) => void;
   onImport: () => void;
+  openCustomer?: string;
 }) {
   const [query, setQuery] = useState(""),
     [status, setStatus] = useState("all"),
     [selected, setSelected] = useState<string | null>(null);
+  useEffect(() => {
+    if (openCustomer && data.customers?.some((c) => c.id === openCustomer))
+      setSelected(openCustomer);
+  }, [openCustomer]);
   const customers = data.customers || [],
     orders = (data.orders || []).filter((o) => o.status !== "cancelled"),
     rules = (data.settings || []).find((r) => r.id === "rules");
@@ -224,7 +231,7 @@ export function Customers({
           .slice(0, 10)
       : null);
   const overdue = (c: Row) =>
-    due(c) && date(due(c)) <= date(new Date().toISOString());
+    due(c) && date(due(c)) <= date(businessNow().toISOString());
   const name = (id: string) =>
     data.salesDirectory?.find((u) => u.id === id)?.name ||
     (id === user.id ? user.name : id);
@@ -244,7 +251,9 @@ export function Customers({
   const c = customers.find((c) => c.id === selected),
     history = c ? orders.filter((o) => o.customer === c.id) : [],
     annual = history.filter((o) =>
-      date(o.createdAt).startsWith(String(new Date().getFullYear())),
+      date(o.confirmedAt || o.createdAt).startsWith(
+        String(businessNow().getFullYear()),
+      ),
     );
   const communication = c
     ? (data.follows || [])
@@ -389,14 +398,20 @@ export function Customers({
                   {(c.en || c.name).slice(0, 2).toUpperCase()}
                 </span>
                 <div>
-                  <h3>{c.en}</h3>
+                  <h3>{c.name}</h3>
                   <p>
-                    {c.country} · {c.industry || "行业待补充"} · {tier(c)}
+                    {c.country} · {c.industry || "行业待补充"} · 建档{" "}
+                    {date(c.since || c.createdAt)}
                   </p>
                 </div>
                 <span className={`badge ${won(c) ? "approved" : "pending"}`}>
                   {won(c) ? "已成交" : "未成交"}
                 </span>
+                {(c.tags || []).map((tag: string) => (
+                  <span className="badge" key={tag}>
+                    {tag}
+                  </span>
+                ))}
               </div>
               <div className="profile-kv">
                 {[
@@ -405,7 +420,10 @@ export function Customers({
                   ["联系电话", c.phone || "待补充"],
                   ["负责人", name(c.owner)],
                   ["最近有效维护", date(c.lastFollow)],
-                  ["下次维护计划", date(due(c))],
+                  [
+                    "下次维护计划",
+                    `${date(due(c))}${overdue(c) ? " · 已到期" : ""}`,
+                  ],
                 ].map(([label, value]) => (
                   <div key={label}>
                     <small>{label}</small>
@@ -413,32 +431,36 @@ export function Customers({
                   </div>
                 ))}
               </div>
-              <h3>客户年度小结 · {new Date().getFullYear()}</h3>
+              <h3>客户年度小结 · {businessNow().getFullYear()}</h3>
               <div className="profile-totals">
-                {["CNY", "USD"].map((currency) => {
-                  const os = annual.filter((o) => o.currency === currency),
-                    total = os.reduce((s, o) => s + o.total, 0),
-                    paid = os.reduce((s, o) => s + o.paid, 0);
-                  return (
-                    <div className="card" key={currency}>
-                      <h4>
-                        {currency} · {os.length} 笔订单
-                      </h4>
-                      <div className="profile-kv">
-                        {[
-                          ["订单金额", total],
-                          ["已核实回款", paid],
-                          ["未结余额", total - paid],
-                        ].map(([k, v]) => (
-                          <div key={k}>
-                            <small>{k}</small>
-                            <strong>{fmt(Number(v), currency)}</strong>
-                          </div>
-                        ))}
+                {["CNY", "USD"]
+                  .filter((currency) =>
+                    annual.some((o) => o.currency === currency),
+                  )
+                  .map((currency) => {
+                    const os = annual.filter((o) => o.currency === currency),
+                      total = os.reduce((s, o) => s + o.total, 0),
+                      paid = os.reduce((s, o) => s + o.paid, 0);
+                    return (
+                      <div className="card" key={currency}>
+                        <h4>
+                          {currency} · {os.length} 笔订单
+                        </h4>
+                        <div className="profile-kv">
+                          {[
+                            ["订单金额", total],
+                            ["已核实回款", paid],
+                            ["未结余额", total - paid],
+                          ].map(([k, v]) => (
+                            <div key={k}>
+                              <small>{k}</small>
+                              <strong>{fmt(Number(v), currency)}</strong>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
               </div>
               <p className="muted">
                 统计口径：本年确认的非取消订单，按原币分别统计；已收为这些订单当前有效核销额。
@@ -470,7 +492,6 @@ export function Customers({
                   <button
                     className="btn"
                     onClick={() => {
-                      setSelected(null);
                       onOrder(o);
                     }}
                   >
@@ -546,9 +567,9 @@ export function Overview({
     T = (zh: string, eng: string) => (en ? eng : zh);
   const total = os.reduce((s, o) => s + o.total, 0),
     paid = os.reduce((s, o) => s + o.paid, 0),
-    tasks = (data.notifications || []).filter((n) => !n.read && !n.resolved);
+    tasks = (data.notifications || []).filter((n) => !n.resolved);
   const months = Array.from({ length: 6 }, (_, i) => {
-      const d = new Date();
+      const d = businessNow();
       d.setDate(1);
       d.setMonth(d.getMonth() - 5 + i);
       const key = d.toISOString().slice(0, 7),
@@ -589,18 +610,27 @@ export function Overview({
           {
             label: T("已核实回款", "Verified payments"),
             value: fmt(paid, currency),
-            hint: T("以有效核销为准", "Based on verified allocations"),
+            hint: `${T("回款覆盖率", "Payment coverage")} ${total ? ((100 * paid) / total).toFixed(1) : 0}%`,
             icon: Wallet,
           },
           {
-            label: T("未结余额", "Outstanding"),
-            value: fmt(total - paid, currency),
+            label: T("逾期未结金额", "Overdue balance"),
+            value: fmt(
+              os
+                .filter(
+                  (o) =>
+                    o.balanceDue &&
+                    o.balanceDue < businessNow().toISOString().slice(0, 10),
+                )
+                .reduce((s, o) => s + Math.max(0, o.total - o.paid), 0),
+              currency,
+            ),
             hint: T("签收和收款独立记录", "Delivery and payment are separate"),
             icon: Clock,
           },
           {
-            label: T("履约中订单", "Active orders"),
-            value: active.length,
+            label: T("待处理事项", "Pending tasks"),
+            value: tasks.length,
             hint: T(
               "生产、发货和签收进度",
               "Production, shipments and delivery",
@@ -640,7 +670,15 @@ export function Overview({
               o.items.some((i: any) => i.shipped > i.delivered),
             ).length,
           ],
-          ["notifications", T("待办提醒", "To do"), tasks.length],
+          [
+            "orders",
+            T("已签收待结清", "Delivered, unpaid"),
+            active.filter(
+              (o) =>
+                o.items.every((i: any) => i.delivered === i.qty) &&
+                o.paid < o.total,
+            ).length,
+          ],
         ].map(([page, label, n], i) => (
           <button key={i} onClick={() => onGo(String(page))}>
             <small>{label}</small>
@@ -714,7 +752,7 @@ export function Overview({
       </div>
       <section className="card section-gap">
         <div className="card-head">
-          <h3>{T("最近订单", "Recent orders")}</h3>
+          <h3>{T("重点订单跟踪", "Priority orders")}</h3>
           <button className="link" onClick={() => onGo("orders")}>
             {T("全部订单", "All orders")} →
           </button>
@@ -727,9 +765,13 @@ export function Overview({
             T("已收 / 余额", "Paid / Balance"),
             T("交期", "Delivery"),
           ]}
-          body={orders
+          body={active
             .slice()
-            .sort((a, b) => String(b.createdAt).localeCompare(a.createdAt))
+            .sort((a, b) =>
+              String(a.lastFollow || a.createdAt).localeCompare(
+                b.lastFollow || b.createdAt,
+              ),
+            )
             .slice(0, 5)
             .map((o) => [
               <button className="link" onClick={() => onOrder(o)}>
