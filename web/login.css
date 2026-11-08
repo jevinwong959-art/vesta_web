@@ -1,0 +1,246 @@
+/* One entrance: account roles come from authentication. */
+@media screen {
+  .login.login-brand-page {
+    --brand-ground: #101827;
+    --brand-ink: #f1f5ff;
+    --brand-muted: #a8b6d0;
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    min-height: 100svh;
+    background: var(--brand-ground);
+    color: var(--brand-ink);
+    color-scheme: dark;
+  }
+  .login-brand-stage {
+    position: relative;
+    display: grid;
+    place-items: center;
+    min-width: 0;
+    padding: 48px;
+    isolation: isolate;
+    overflow: hidden;
+  }
+  .brand-tilt {
+    width: min(100%, 640px);
+    transform: perspective(1100px) rotateX(var(--prism-rx, 8deg))
+      rotateY(var(--prism-ry, -12deg)) rotateZ(-3deg);
+  }
+  .login-brand-art {
+    display: block;
+    width: 100%;
+    overflow: visible;
+  }
+  .brand-prism {
+    transform-origin: 320px 280px;
+    filter: drop-shadow(12px 24px 18px #03091570);
+  }
+  .brand-bevel {
+    fill: none;
+    stroke: #d8e8ff;
+    stroke-opacity: 0.65;
+    stroke-width: 1.5;
+  }
+  .brand-reflection {
+    transform: translateX(var(--prism-light, 330px)) skewX(-24deg);
+  }
+  .brand-edge-light {
+    fill: none;
+    stroke: #edf6ff;
+    stroke-width: 3;
+    stroke-linecap: round;
+    stroke-dasharray: 0.12 0.88;
+    opacity: 0;
+  }
+  .brand-edge {
+    fill: none;
+    stroke: #b9d1ff;
+    stroke-width: 0.8;
+  }
+  .brand-wordmark {
+    color: var(--brand-ink);
+  }
+  .brand-replay {
+    position: absolute;
+    bottom: 32px;
+    left: 40px;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border: 1px solid #41516c;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--brand-muted);
+    cursor: pointer;
+  }
+  .brand-replay:hover {
+    color: var(--brand-ink);
+    background: #1b2940;
+  }
+  .login-brand-page .login-panel {
+    min-width: 0;
+    background: transparent;
+    padding: 56px clamp(32px, 5vw, 88px) 56px 40px;
+  }
+  .login-brand-page .login-card {
+    max-width: 360px;
+    width: 100%;
+  }
+  .login-brand-page .login-card label {
+    color: var(--brand-muted);
+    margin-top: 24px;
+  }
+  .login-brand-page .login-card label:first-child {
+    margin-top: 0;
+  }
+  .login-brand-page .login-card input {
+    height: 52px;
+    margin-top: 10px;
+    border: 1px solid #61708b;
+    border-radius: 8px;
+    background: #152136;
+    color: var(--brand-ink);
+    caret-color: #9bbaff;
+    box-shadow: none;
+  }
+  .login-brand-page .login-card input:focus {
+    border-color: #a6c2ff;
+    outline: 2px solid #a6c2ff;
+    outline-offset: 3px;
+  }
+  .login-brand-page .login-submit {
+    height: 52px;
+    margin-top: 32px;
+    border-color: #2855d9;
+    background: #2855d9;
+    color: #fff;
+  }
+  .login-brand-page .login-submit:hover:not(:disabled) {
+    background: #3563e6;
+  }
+  .login-brand-page .login-submit:disabled {
+    opacity: 0.65;
+    cursor: wait;
+  }
+  .login-brand-page .link {
+    color: var(--brand-muted);
+    min-height: 44px;
+    margin-top: 16px;
+    text-underline-offset: 4px;
+  }
+  .login-brand-page .link:hover {
+    color: var(--brand-ink);
+  }
+  .login-brand-page button:focus-visible {
+    outline: 2px solid #a6c2ff;
+    outline-offset: 4px;
+  }
+  .login-brand-page ::selection {
+    background: #2855d9;
+    color: #fff;
+  }
+  .login-brand-page .alert.error {
+    color: #ffd7d7;
+    background: #43252f;
+    border-color: #b66d7a;
+  }
+  .login-brand-page .notice-box {
+    color: #d9e5ff;
+    background: #203352;
+    border-color: #61708b;
+  }
+  .login-brand-page .login-card h2 {
+    color: var(--brand-ink);
+    font-size: 24px;
+    margin: 0 0 28px;
+  }
+}
+@media screen and (prefers-reduced-motion: no-preference) {
+  .brand-prism {
+    animation: vesta-prism 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .brand-edge-light {
+    animation: vesta-edge-pass 1600ms 100ms ease-in-out both;
+  }
+  .brand-edge {
+    animation: vesta-trace 1100ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .brand-wordmark path {
+    animation: vesta-trace 800ms 200ms ease-out both;
+  }
+  .login-brand-art[data-paused="true"] * {
+    animation-play-state: paused;
+  }
+  .login-brand-page .login-submit svg {
+    transition: transform 180ms ease-out;
+  }
+  .login-brand-page .login-submit:hover:not(:disabled) svg {
+    transform: translate(2px, -2px);
+  }
+}
+@keyframes vesta-prism {
+  from {
+    transform: translate(0, 18px) rotate(-6deg) scale(0.94);
+    opacity: 0.65;
+  }
+  to {
+    transform: translate(0, 0) rotate(0) scale(1);
+    opacity: 1;
+  }
+}
+@keyframes vesta-edge-pass {
+  0% {
+    stroke-dashoffset: 1;
+    opacity: 0;
+  }
+  20%,
+  65% {
+    opacity: 0.9;
+  }
+  100% {
+    stroke-dashoffset: -0.1;
+    opacity: 0;
+  }
+}
+@keyframes vesta-trace {
+  from {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
+  }
+}
+@media screen and (max-width: 900px) {
+  .login.login-brand-page {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .login-brand-stage {
+    padding: 24px;
+  }
+  .login-brand-page .login-panel {
+    padding: 40px 32px;
+  }
+}
+@media screen and (max-width: 600px) {
+  .login.login-brand-page {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    align-content: start;
+  }
+  .login-brand-stage {
+    padding: 32px 56px 12px;
+  }
+  .brand-tilt {
+    width: min(100%, 240px);
+  }
+  .brand-replay {
+    left: 18px;
+    bottom: 14px;
+  }
+  .login-brand-page .login-panel {
+    padding: 24px 28px 40px;
+    align-items: flex-start;
+  }
+}

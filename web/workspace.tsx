@@ -1,5 +1,7 @@
 import { businessNow, businessDay } from "./clock";
 import React, { useState, useEffect } from "react";
+import { RecordsTable, EmptyState } from "./records-table";
+import { RecordNavigation } from "./record-navigation";
 import {
   Users,
   Check,
@@ -190,41 +192,20 @@ export function GridTable({
   heads,
   body,
   mobileCards = false,
+  empty,
 }: {
   heads: string[];
   body: React.ReactNode[][];
   mobileCards?: boolean;
+  empty?: React.ReactNode;
 }) {
   return (
-    <div className={"table-scroll" + (mobileCards ? " mobile-records" : "")}>
-      <table>
-        <thead>
-          <tr>
-            {heads.map((h) => (
-              <th key={h}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {body.map((r, i) => (
-            <tr key={i}>
-              {r.map((c, j) => (
-                <td key={j} data-label={heads[j]}>
-                  {c}
-                </td>
-              ))}
-            </tr>
-          ))}
-          {!body.length && (
-            <tr>
-              <td colSpan={heads.length} className="empty">
-                暂无匹配记录
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+    <RecordsTable
+      heads={heads}
+      rows={body}
+      empty={empty}
+      className={"table-scroll" + (mobileCards ? " mobile-records" : "")}
+    />
   );
 }
 export function Customers({
@@ -239,17 +220,20 @@ export function Customers({
   data: Data;
   user: any;
   onFollow: (c: Row) => void;
-  onEdit: (c: Row) => void;
-  onOrder: (o: Row) => void;
+  onEdit: (c?: Row) => void;
+  onOrder: (o: Row, scope?: Row[]) => void;
   onImport: () => void;
   openCustomer?: string;
 }) {
   const [query, setQuery] = useState(""),
     [status, setStatus] = useState("all"),
-    [selected, setSelected] = useState<string | null>(null);
+    [selected, setSelected] = useState<string | null>(null),
+    [selectionIds, setSelectionIds] = useState<string[]>([]);
   useEffect(() => {
-    if (openCustomer && data.customers?.some((c) => c.id === openCustomer))
+    if (openCustomer && data.customers?.some((c) => c.id === openCustomer)) {
+      setSelectionIds([openCustomer]);
       setSelected(openCustomer);
+    }
   }, [openCustomer]);
   const customers = data.customers || [],
     orders = (data.orders || []).filter((o) => o.status !== "cancelled"),
@@ -287,6 +271,10 @@ export function Customers({
       (status === "all" ||
         (status === "won" ? won(c) : status === "due" ? overdue(c) : !won(c))),
   );
+  const openProfile = (id: string) => {
+    setSelectionIds(matching.map((row) => row.id));
+    setSelected(id);
+  };
   const c = customers.find((c) => c.id === selected),
     history = c
       ? orders
@@ -370,6 +358,32 @@ export function Customers({
         </div>
         <GridTable
           mobileCards
+          empty={
+            <EmptyState
+              filtered={Boolean(query || status !== "all")}
+              title={
+                query || status !== "all"
+                  ? "没有符合条件的客户"
+                  : "还没有客户档案"
+              }
+              description={
+                query || status !== "all"
+                  ? "可清除搜索和状态筛选，重新查看当前授权范围内的客户。"
+                  : "先建立客户档案，再记录联系信息、报价和维护计划。"
+              }
+              action={
+                query || status !== "all"
+                  ? {
+                      label: "清除筛选",
+                      onClick: () => {
+                        setQuery("");
+                        setStatus("all");
+                      },
+                    }
+                  : { label: "新增客户", onClick: () => onEdit() }
+              }
+            />
+          }
           heads={[
             "客户名称 / 地区",
             "联系人",
@@ -384,7 +398,7 @@ export function Customers({
                 {(c.en || c.name).slice(0, 2).toUpperCase()}
               </span>
               <div>
-                <button className="link" onClick={() => setSelected(c.id)}>
+                <button className="link" onClick={() => openProfile(c.id)}>
                   {c.name}
                 </button>
                 <small className="sub">
@@ -411,7 +425,7 @@ export function Customers({
               </small>
             </>,
             <div className="actions">
-              <button className="btn" onClick={() => setSelected(c.id)}>
+              <button className="btn" onClick={() => openProfile(c.id)}>
                 档案
               </button>
               <button className="btn soft" onClick={() => onFollow(c)}>
@@ -431,7 +445,6 @@ export function Customers({
           >
             <div className="modal-head">
               <div>
-                <small className="eyebrow">CUSTOMER PROFILE</small>
                 <h2>客户档案 · {c.name}</h2>
               </div>
               <button
@@ -442,6 +455,13 @@ export function Customers({
                 <X />
               </button>
             </div>
+            <RecordNavigation
+              ids={selectionIds.filter((id) =>
+                customers.some((row) => row.id === id),
+              )}
+              current={c.id}
+              onSelect={setSelected}
+            />
             <div className="modal-body">
               <div className="profile-summary">
                 <span className="crm-avatar">
@@ -557,7 +577,7 @@ export function Customers({
                   <button
                     className="btn"
                     onClick={() => {
-                      onOrder(o);
+                      onOrder(o, history);
                     }}
                   >
                     查看
@@ -827,7 +847,9 @@ export function Overview({
         </section>
         <section className="card">
           <div className="card-head">
-            <h2>{T("优先处理", "Priority tasks")}</h2>
+            <h2 className="priority-title">
+              {T("优先处理", "Priority tasks")}
+            </h2>
             <button className="link" onClick={() => onGo("notifications")}>
               {T("全部待办", "All tasks")} →
             </button>
@@ -837,10 +859,8 @@ export function Overview({
               <button key={n.id} onClick={() => onTask(n)}>
                 <Clock size={18} />
                 <div>
-                  <strong>
-                    {notificationTitle(n, en)} ·{" "}
-                    {notificationEntity(n, data, en)}
-                  </strong>
+                  <strong>{notificationEntity(n, data, en)}</strong>
+                  <small>{notificationTitle(n, en)}</small>
                   <small>
                     {n.due &&
                       (new Date(n.due).getTime() < businessNow().getTime()

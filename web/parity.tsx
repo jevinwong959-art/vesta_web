@@ -3,6 +3,7 @@ import { businessDay } from "./clock";
 import React, { useState, useEffect, useRef } from "react";
 import { X, Plus, Search } from "lucide-react";
 import { orderStage, fmt } from "./workspace";
+import { RecordsTable } from "./records-table";
 type Row = { id: string; [key: string]: any };
 type Data = Record<string, Row[]>;
 const day = (v: any) => (v ? String(v).slice(0, 10) : "—");
@@ -18,35 +19,7 @@ export function Table({
   heads: string[];
   rows: React.ReactNode[][];
 }) {
-  return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            {heads.map((h) => (
-              <th key={h}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={i}>
-              {r.map((c, j) => (
-                <td key={j}>{c}</td>
-              ))}
-            </tr>
-          ))}
-          {!rows.length && (
-            <tr>
-              <td colSpan={heads.length} className="empty">
-                暂无记录 / No records
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
+  return <RecordsTable heads={heads} rows={rows} className="table-wrap" />;
 }
 export function KV({ items }: { items: [string, React.ReactNode][] }) {
   return (

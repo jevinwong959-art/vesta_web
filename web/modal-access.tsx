@@ -37,7 +37,13 @@ export function ModalAccess() {
           next.focus();
         } else if (top) {
           const old = prior.get(top);
-          if (old?.isConnected) old.focus();
+          if (
+            old?.isConnected &&
+            !old.closest("[inert]") &&
+            !old.matches(":disabled") &&
+            (!next || next.contains(old))
+          )
+            old.focus();
           else next?.focus();
         }
         top = next;

@@ -1,0 +1,412 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-07T17:21:28.289Z",
+  "title": "Design System: Vesta",
+  "extensions": {
+    "colorMeta": {
+      "accent": {
+        "role": "primary",
+        "displayName": "钴蓝",
+        "canonical": "#2855d9",
+        "tonalRamp": [
+          "oklch(15% 0.0945 -94.9)",
+          "oklch(26% 0.1517 -94.9)",
+          "oklch(38% 0.1935 -94.9)",
+          "oklch(49% 0.2080 -94.9)",
+          "oklch(61% 0.1958 -94.9)",
+          "oklch(72% 0.1603 -94.9)",
+          "oklch(84% 0.1002 -94.9)",
+          "oklch(95% 0.0326 -94.9)"
+        ]
+      },
+      "accent-hover": {
+        "role": "primary",
+        "displayName": "accent-hover",
+        "canonical": "#2046b8",
+        "tonalRamp": [
+          "oklch(15% 0.0840 -94.8)",
+          "oklch(26% 0.1349 -94.8)",
+          "oklch(38% 0.1720 -94.8)",
+          "oklch(49% 0.1849 -94.8)",
+          "oklch(61% 0.1741 -94.8)",
+          "oklch(72% 0.1426 -94.8)",
+          "oklch(84% 0.0891 -94.8)",
+          "oklch(95% 0.0289 -94.8)"
+        ]
+      },
+      "accent-soft": {
+        "role": "primary",
+        "displayName": "accent-soft",
+        "canonical": "#edf2ff",
+        "tonalRamp": [
+          "oklch(15% 0.0083 -90.9)",
+          "oklch(26% 0.0133 -90.9)",
+          "oklch(38% 0.0170 -90.9)",
+          "oklch(49% 0.0182 -90.9)",
+          "oklch(61% 0.0172 -90.9)",
+          "oklch(72% 0.0141 -90.9)",
+          "oklch(84% 0.0088 -90.9)",
+          "oklch(95% 0.0029 -90.9)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "石墨",
+        "canonical": "#202631",
+        "tonalRamp": [
+          "oklch(15% 0.0102 -97.5)",
+          "oklch(26% 0.0163 -97.5)",
+          "oklch(38% 0.0208 -97.5)",
+          "oklch(49% 0.0224 -97.5)",
+          "oklch(61% 0.0210 -97.5)",
+          "oklch(72% 0.0172 -97.5)",
+          "oklch(84% 0.0108 -97.5)",
+          "oklch(95% 0.0035 -97.5)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "辅助灰",
+        "canonical": "#596575",
+        "tonalRamp": [
+          "oklch(15% 0.0134 -104.3)",
+          "oklch(26% 0.0215 -104.3)",
+          "oklch(38% 0.0275 -104.3)",
+          "oklch(49% 0.0295 -104.3)",
+          "oklch(61% 0.0278 -104.3)",
+          "oklch(72% 0.0228 -104.3)",
+          "oklch(84% 0.0142 -104.3)",
+          "oklch(95% 0.0046 -104.3)"
+        ]
+      },
+      "canvas": {
+        "role": "neutral",
+        "displayName": "冷白画布",
+        "canonical": "#f5f6f8",
+        "tonalRamp": [
+          "oklch(15% 0.0013 -95.5)",
+          "oklch(26% 0.0021 -95.5)",
+          "oklch(38% 0.0027 -95.5)",
+          "oklch(49% 0.0029 -95.5)",
+          "oklch(61% 0.0027 -95.5)",
+          "oklch(72% 0.0022 -95.5)",
+          "oklch(84% 0.0014 -95.5)",
+          "oklch(95% 0.0004 -95.5)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "内容白",
+        "canonical": "#fff",
+        "tonalRamp": [
+          "oklch(15% 0.0000 89.9)",
+          "oklch(26% 0.0000 89.9)",
+          "oklch(38% 0.0000 89.9)",
+          "oklch(49% 0.0000 89.9)",
+          "oklch(61% 0.0000 89.9)",
+          "oklch(72% 0.0000 89.9)",
+          "oklch(84% 0.0000 89.9)",
+          "oklch(95% 0.0000 89.9)"
+        ]
+      },
+      "surface-soft": {
+        "role": "neutral",
+        "displayName": "surface-soft",
+        "canonical": "#f8f9fb",
+        "tonalRamp": [
+          "oklch(15% 0.0013 -95.5)",
+          "oklch(26% 0.0021 -95.5)",
+          "oklch(38% 0.0027 -95.5)",
+          "oklch(49% 0.0029 -95.5)",
+          "oklch(61% 0.0027 -95.5)",
+          "oklch(72% 0.0022 -95.5)",
+          "oklch(84% 0.0014 -95.5)",
+          "oklch(95% 0.0004 -95.5)"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "line",
+        "canonical": "#e2e6ed",
+        "tonalRamp": [
+          "oklch(15% 0.0047 -98.2)",
+          "oklch(26% 0.0076 -98.2)",
+          "oklch(38% 0.0097 -98.2)",
+          "oklch(49% 0.0104 -98.2)",
+          "oklch(61% 0.0098 -98.2)",
+          "oklch(72% 0.0080 -98.2)",
+          "oklch(84% 0.0050 -98.2)",
+          "oklch(95% 0.0016 -98.2)"
+        ]
+      },
+      "control-border": {
+        "role": "neutral",
+        "displayName": "control-border",
+        "canonical": "#7c8797",
+        "tonalRamp": [
+          "oklch(15% 0.0125 -102.3)",
+          "oklch(26% 0.0200 -102.3)",
+          "oklch(38% 0.0255 -102.3)",
+          "oklch(49% 0.0274 -102.3)",
+          "oklch(61% 0.0258 -102.3)",
+          "oklch(72% 0.0211 -102.3)",
+          "oklch(84% 0.0132 -102.3)",
+          "oklch(95% 0.0043 -102.3)"
+        ]
+      },
+      "status-success-ink": {
+        "role": "neutral",
+        "displayName": "status-success-ink",
+        "canonical": "#237553",
+        "tonalRamp": [
+          "oklch(15% 0.0434 161.7)",
+          "oklch(26% 0.0697 161.7)",
+          "oklch(38% 0.0889 161.7)",
+          "oklch(49% 0.0956 161.7)",
+          "oklch(61% 0.0900 161.7)",
+          "oklch(72% 0.0737 161.7)",
+          "oklch(84% 0.0461 161.7)",
+          "oklch(95% 0.0150 161.7)"
+        ]
+      },
+      "status-success-surface": {
+        "role": "neutral",
+        "displayName": "status-success-surface",
+        "canonical": "#edf7f0",
+        "tonalRamp": [
+          "oklch(15% 0.0064 155.6)",
+          "oklch(26% 0.0102 155.6)",
+          "oklch(38% 0.0130 155.6)",
+          "oklch(49% 0.0140 155.6)",
+          "oklch(61% 0.0132 155.6)",
+          "oklch(72% 0.0108 155.6)",
+          "oklch(84% 0.0068 155.6)",
+          "oklch(95% 0.0022 155.6)"
+        ]
+      },
+      "status-warning-ink": {
+        "role": "neutral",
+        "displayName": "status-warning-ink",
+        "canonical": "#99631d",
+        "tonalRamp": [
+          "oklch(15% 0.0487 68.1)",
+          "oklch(26% 0.0783 68.1)",
+          "oklch(38% 0.0998 68.1)",
+          "oklch(49% 0.1073 68.1)",
+          "oklch(61% 0.1010 68.1)",
+          "oklch(72% 0.0827 68.1)",
+          "oklch(84% 0.0517 68.1)",
+          "oklch(95% 0.0168 68.1)"
+        ]
+      },
+      "status-warning-surface": {
+        "role": "neutral",
+        "displayName": "status-warning-surface",
+        "canonical": "#fff5df",
+        "tonalRamp": [
+          "oklch(15% 0.0140 86.5)",
+          "oklch(26% 0.0224 86.5)",
+          "oklch(38% 0.0286 86.5)",
+          "oklch(49% 0.0308 86.5)",
+          "oklch(61% 0.0290 86.5)",
+          "oklch(72% 0.0237 86.5)",
+          "oklch(84% 0.0148 86.5)",
+          "oklch(95% 0.0048 86.5)"
+        ]
+      },
+      "status-error-ink": {
+        "role": "neutral",
+        "displayName": "status-error-ink",
+        "canonical": "#aa5f4c",
+        "tonalRamp": [
+          "oklch(15% 0.0465 35.1)",
+          "oklch(26% 0.0747 35.1)",
+          "oklch(38% 0.0952 35.1)",
+          "oklch(49% 0.1024 35.1)",
+          "oklch(61% 0.0964 35.1)",
+          "oklch(72% 0.0789 35.1)",
+          "oklch(84% 0.0493 35.1)",
+          "oklch(95% 0.0160 35.1)"
+        ]
+      },
+      "status-error-surface": {
+        "role": "neutral",
+        "displayName": "status-error-surface",
+        "canonical": "#fff0eb",
+        "tonalRamp": [
+          "oklch(15% 0.0080 39.4)",
+          "oklch(26% 0.0129 39.4)",
+          "oklch(38% 0.0164 39.4)",
+          "oklch(49% 0.0176 39.4)",
+          "oklch(61% 0.0166 39.4)",
+          "oklch(72% 0.0136 39.4)",
+          "oklch(84% 0.0085 39.4)",
+          "oklch(95% 0.0028 39.4)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "页面标题",
+        "purpose": "当前页面唯一主标题。"
+      },
+      "metric": {
+        "displayName": "统计数字",
+        "purpose": "保留币种、等宽数字与比例字距。"
+      },
+      "priority-title": {
+        "displayName": "优先任务标题",
+        "purpose": "18px字级，明确区别于15px任务对象。"
+      }
+    },
+    "shadows": [
+      {
+        "name": "card",
+        "value": "0 2px 4px #20263103",
+        "purpose": "卡片轻分离。"
+      },
+      {
+        "name": "dialog",
+        "value": "0 32px 100px #1b263d30",
+        "purpose": "集中任务弹窗。"
+      }
+    ],
+    "motion": [
+      {
+        "name": "basket-feedback",
+        "value": "180ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "加入数量短反馈；prefers-reduced-motion: reduce 时无动画。"
+      },
+      {
+        "name": "login-brand-prism",
+        "value": "900ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "VESTA 立体折光V有限入场；精细鼠标在品牌区驱动CSS透视与反光，85ms时间常数平滑追随，归位后停止计算；减少动态时静态。"
+      },
+      {
+        "name": "login-brand-trace",
+        "value": "1100ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "V 轮廓有限描线，字标延迟200ms后描绘800ms；按钮可重播，后台暂停，减少动态使用静态图形。"
+      },
+      {
+        "name": "login-brand-edge-light",
+        "value": "1600ms 100ms ease-in-out",
+        "purpose": "边缘光沿V轮廓单次掠过，结束透明；与品牌整体入场构成同一序列，无持续循环。"
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compact-metrics",
+        "value": "480px"
+      },
+      {
+        "name": "mobile-workspace",
+        "value": "760px"
+      },
+      {
+        "name": "compact-desktop",
+        "value": "1200px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "主要按钮",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "克制而明确，按操作重要性使用。",
+      "html": "<button class=\"ds-btn-primary\">保存客户</button>",
+      "css": ".ds-btn-primary{font-family:\"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif;font-size:13px;line-height:1.6;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:9px 16px;border-radius:7px;font-weight:600;cursor:pointer;background:var(--accent,#2855d9);color:#fff;border:1px solid var(--accent,#2855d9)}.ds-btn-primary:hover{background:var(--accent-hover,#2046b8)}.ds-btn-primary:focus-visible{outline:3px solid var(--accent,#2855d9);outline-offset:3px;}.ds-btn-primary:disabled{opacity:.5;cursor:not-allowed}"
+    },
+    {
+      "name": "次要按钮",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "克制而明确，按操作重要性使用。",
+      "html": "<button class=\"ds-btn-secondary\">关闭</button>",
+      "css": ".ds-btn-secondary{font-family:\"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif;font-size:13px;line-height:1.6;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:9px 16px;border-radius:7px;font-weight:600;cursor:pointer;background:var(--surface,#fff);color:#3f4959;border:1px solid #d9dee7}.ds-btn-secondary:hover{background:#f6f8fc}.ds-btn-secondary:focus-visible{outline:3px solid var(--accent,#2855d9);outline-offset:3px;}.ds-btn-secondary:disabled{opacity:.5;cursor:not-allowed}"
+    },
+    {
+      "name": "轻量操作",
+      "kind": "button",
+      "refersTo": "button-soft",
+      "description": "克制而明确，按操作重要性使用。",
+      "html": "<button class=\"ds-btn-soft\">记录跟进</button>",
+      "css": ".ds-btn-soft{font-family:\"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif;font-size:13px;line-height:1.6;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:9px 16px;border-radius:7px;font-weight:600;cursor:pointer;background:var(--accent-soft,#edf2ff);color:var(--accent,#2855d9);border:1px solid transparent}.ds-btn-soft:hover{background:var(--accent-soft,#edf2ff)}.ds-btn-soft:focus-visible{outline:3px solid var(--accent,#2855d9);outline-offset:3px;}.ds-btn-soft:disabled{opacity:.5;cursor:not-allowed}"
+    },
+    {
+      "name": "输入框",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "标签持续可见；边界、焦点和错误各有独立状态。",
+      "html": "<label class=\"ds-field\">客户名称<input class=\"ds-input\" placeholder=\"输入公司名称\" /></label>",
+      "css": ".ds-field{font-family:\"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif;font-size:13px;line-height:1.6;display:grid;gap:8px;color:var(--ink,#202631)}.ds-input{font-family:\"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif;font-size:13px;line-height:1.6;min-width:0;padding:10px 12px;border:1px solid var(--control-border,#7c8797);border-radius:7px;background:var(--surface,#fff);color:var(--ink,#202631);outline:none}.ds-input:focus{border-color:var(--accent,#2855d9);box-shadow:0 0 0 3px #2855d912}.ds-input::placeholder{color:var(--muted,#596575)}.ds-input[aria-invalid=true]{border-color:var(--status-error-ink,#aa5f4c)}.ds-input:disabled{background:var(--surface-soft,#f8f9fb);cursor:not-allowed}"
+    },
+    {
+      "name": "当前导航",
+      "kind": "nav",
+      "description": "浅蓝标识当前位置。",
+      "html": "<nav aria-label=\"工作区\"><button class=\"ds-nav\" aria-current=\"page\"><svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><rect x=\"3\" y=\"3\" width=\"7\" height=\"7\" rx=\"1\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"7\" rx=\"1\"/><rect x=\"3\" y=\"14\" width=\"7\" height=\"7\" rx=\"1\"/><rect x=\"14\" y=\"14\" width=\"7\" height=\"7\" rx=\"1\"/></svg>经营总览</button></nav>",
+      "css": ".ds-nav{font-family:\"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif;font-size:13px;line-height:1.6;display:flex;align-items:center;gap:12px;border:0;border-radius:8px;padding:10px 12px;background:var(--accent-soft,#edf2ff);color:var(--accent,#2855d9);font-weight:500;cursor:pointer}.ds-nav:hover{background:#f4f6fa}.ds-nav:focus-visible{outline:3px solid var(--accent,#2855d9);outline-offset:3px;}"
+    },
+    {
+      "name": "状态标签",
+      "kind": "chip",
+      "refersTo": "status-success",
+      "description": "文字说明状态，颜色辅助识别。",
+      "html": "<span class=\"ds-status\">已核实</span>",
+      "css": ".ds-status{font-family:\"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif;font-size:13px;line-height:1.6;display:inline-block;font-size:12px;font-weight:500;padding:4px 9px;border-radius:5px;color:var(--status-success-ink,#237553);background:var(--status-success-surface,#edf7f0)}"
+    },
+    {
+      "name": "统计卡",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "统一浅色；数字与上下文一起展示。",
+      "html": "<section class=\"ds-stat\"><p>已核实回款</p><strong>¥6,000.00</strong><small>虚构演示数据 · CNY</small></section>",
+      "css": ".ds-stat{font-family:\"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif;font-size:13px;line-height:1.6;padding:24px;border:1px solid var(--line,#e2e6ed);border-radius:12px;background:var(--surface,#fff);box-shadow:0 2px 4px #20263103}.ds-stat p{margin:0;color:var(--muted,#596575)}.ds-stat strong{display:block;margin:20px 0 10px;color:var(--ink,#202631);font-size:clamp(24px,2.1vw,34px);line-height:1.2;font-weight:650;letter-spacing:-.03em;font-variant-numeric:tabular-nums}.ds-stat small{font-size:12px;color:var(--muted,#596575)}"
+    },
+    {
+      "name": "记录连续处理",
+      "kind": "custom",
+      "description": "详情内保留列表顺序，位置与按钮一起呈现。",
+      "html": "<nav class=\"ds-record\" aria-label=\"浏览当前列表\"><span><strong>2</strong> / 8</span><div><button>上一条</button><button>下一条</button></div></nav>",
+      "css": ".ds-record{font-family:\"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif;font-size:13px;line-height:1.6;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:12px 24px;border-bottom:1px solid var(--line,#e2e6ed);background:var(--surface-soft,#f8f9fb);color:var(--muted,#596575)}.ds-record strong{font-size:18px;color:var(--accent,#2855d9)}.ds-record div{display:flex;gap:8px}.ds-record button{font-family:\"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif;font-size:13px;line-height:1.6;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:9px 16px;border-radius:7px;font-weight:600;cursor:pointer;border:1px solid #d9dee7;background:var(--surface,#fff);color:#3f4959}.ds-record button:hover{background:#f6f8fc}.ds-record button:focus-visible{outline:3px solid var(--accent,#2855d9);outline-offset:3px;}"
+    }
+  ],
+  "narrative": {
+    "northStar": "业务工作台",
+    "overview": "清楚、克制、可靠，以完成任务为先。设计感来自任务顺序、对象身份、数字对齐与操作反馈：先认出正在处理的客户或订单，再理解状态和下一步。\n\n保留钴蓝、石墨、冷白的现有体系。浅色页面承载信息，细边框区分相邻区域，弹窗用集中层次承载一项任务。主操作醒目，次操作安静，输入边界清楚；统计卡保持统一浅色。",
+    "keyCharacteristics": [
+      "对象名称与当前任务优先，辅助说明后置。",
+      "克制而明确的控件，持续可见的键盘焦点。",
+      "桌面按列比较，手机按记录阅读。",
+      "反馈可理解、可恢复，动态效果不承载唯一信息。"
+    ],
+    "rules": [
+      {
+        "name": "The 明确边界 Rule",
+        "body": "输入控件使用 control-border，不能退化为容器的浅色分隔线。",
+        "section": "colors"
+      },
+      {
+        "name": "The 数字可比 Rule",
+        "body": "金额保留币种和精度，用等宽数字对齐，不用动画数字替代实际金额。",
+        "section": "typography"
+      },
+      {
+        "name": "The 统一统计 Rule",
+        "body": "统计卡保持统一浅色，不用第一张深色卡制造任意重要性。",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do 先展示客户/订单身份，再展示任务、时间和操作。",
+      "Do 保留键盘焦点、状态文字、错误恢复和减少动态回退。",
+      "Do 同时检查桌面比较和手机逐条处理的布局。"
+    ],
+    "donts": [
+      "Don't 用深色首项统计卡破坏统一浅色统计体系。",
+      "Don't 用颜色、动效或装饰性小标题替代必要的业务说明。",
+      "Don't 将屏幕主题自动套用到正式报价打印文档。"
+    ]
+  }
+}

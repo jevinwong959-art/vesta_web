@@ -1,6 +1,8 @@
-import Decimal from "decimal.js";
+import FormModal from "./form-loader";
+import { LoginBrand } from "./login-brand";
+import type { Form, Field } from "./form-types";
 import { PricingNote, displayCurrency, productPrice } from "./pricing";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import {
   LayoutDashboard,
@@ -30,9 +32,12 @@ import {
 } from "lucide-react";
 import "./tokens.css";
 import "./screen.css";
+import "./login.css";
 import "./print.css";
 import { ModalAccess } from "./modal-access";
 import { useMobileNavigation } from "./mobile-navigation";
+import { RecordsTable, EmptyState, RecordsLanguage } from "./records-table";
+import { RecordNavigation } from "./record-navigation";
 import { businessDay, businessNow, setReferenceDate } from "./clock";
 import {
   BusinessDetail,
@@ -62,23 +67,6 @@ type User = {
   role: string;
   customer?: string;
   csrf: string;
-};
-type Field = {
-  key: string;
-  label: string;
-  section?: string;
-  type?: string;
-  options?: { value: string; label: string }[];
-  value?: any;
-  required?: boolean;
-};
-type Form = {
-  title: string;
-  fields: Field[];
-  submit: (v: any) => Promise<any>;
-  quote?: boolean;
-  items?: any[];
-  allocations?: { order: string; amount: number }[];
 };
 const ruleNames: Record<string, string> = {
   orderDays: "订单跟进周期（天）",
@@ -201,10 +189,12 @@ function App() {
     [form, setForm] = useState<Form | null>(null),
     [importKind, setImportKind] = useState<string | null>(null),
     [detail, setDetail] = useState<Row | null>(null),
+    [detailIds, setDetailIds] = useState<string[]>([]),
     [mobile, setMobile] = useState(false),
     [requestOpen, setRequestOpen] = useState(false),
     [requestDraft, setRequestDraft] = useState<RequestDraft | null>(null),
     [basket, setBasket] = useState<any[]>([]),
+    [basketUndo, setBasketUndo] = useState<any[] | null>(null),
     [aux, setAux] = useState<{ kind: string; row: Row } | null>(null),
     [printQuote, setPrintQuote] = useState<Row | null>(null),
     [paymentTab, setPaymentTab] = useState("receivables"),
@@ -212,6 +202,9 @@ function App() {
     [taskTab, setTaskTab] = useState("todo"),
     [settingsTab, setSettingsTab] = useState("permissions"),
     [reference, setReference] = useState<string | null>(null);
+  const activeSession = useRef(user?.csrf);
+  const loadVersion = useRef(0);
+  activeSession.current = user?.csrf;
   const en = lang === "en",
     T = (zh: string, english: string) => (en ? english : zh);
   const portal = user?.role === "customer",
@@ -230,6 +223,7 @@ function App() {
     setRequestOpen(false);
     setRequestDraft(null);
     setBasket([]);
+    setBasketUndo(null);
   }, [user?.id]);
   async function api(path: string, body?: any) {
     const r = await fetch("/api/v1/" + path, {
@@ -245,56 +239,72 @@ function App() {
     });
     const payload = await r.json();
     if (!r.ok) {
-      if (r.status === 401 && path !== "login") setUser(null);
+      if (
+        r.status === 401 &&
+        path !== "login" &&
+        user?.csrf === activeSession.current
+      )
+        setUser(null);
       throw new Error(payload.message || "Request failed");
     }
     return payload;
   }
   async function load() {
     if (!user) return;
-    const health = await api("health");
-    setReferenceDate(health.referenceDate);
-    setReference(health.referenceDate);
-    const kinds = portal
-      ? [
-          "customers",
-          "products",
-          "inquiries",
-          "quotes",
-          "orders",
-          "shipments",
-          "contracts",
-          "notifications",
-        ]
-      : [
-          "customers",
-          "products",
-          "inquiries",
-          "quotes",
-          "orders",
-          "receipts",
-          "shipments",
-          "contracts",
-          "follows",
-          "rates",
-          "ledger",
-          "adjustments",
-          "notifications",
-          ...(["owner", "manager"].includes(user.role)
-            ? ["settings", "mails"]
-            : []),
-          ...(user.role === "owner" ? ["audits"] : []),
-        ];
-    const result = await Promise.all(
-      kinds.map(async (k) => [k, await api("data/" + k)]),
-    );
-    const next = Object.fromEntries(result);
-    if (["owner"].includes(user.role)) next.users = await api("users");
-    if (user.role === "owner")
-      next.customerDirectory = await api("customer-directory");
-    if (["owner", "manager", "sales"].includes(user.role))
-      next.salesDirectory = await api("sales-directory");
-    setData(next);
+    const version = ++loadVersion.current;
+    const current = () =>
+      version === loadVersion.current && user.csrf === activeSession.current;
+    try {
+      const health = await api("health");
+      if (!current()) return;
+      const kinds = portal
+        ? [
+            "customers",
+            "products",
+            "inquiries",
+            "quotes",
+            "orders",
+            "shipments",
+            "contracts",
+            "notifications",
+          ]
+        : [
+            "customers",
+            "products",
+            "inquiries",
+            "quotes",
+            "orders",
+            "receipts",
+            "shipments",
+            "contracts",
+            "follows",
+            "rates",
+            "ledger",
+            "adjustments",
+            "notifications",
+            ...(["owner", "manager"].includes(user.role)
+              ? ["settings", "mails"]
+              : []),
+            ...(user.role === "owner" ? ["audits"] : []),
+          ];
+      const result = await Promise.all(
+        kinds.map(async (k) => [k, await api("data/" + k)]),
+      );
+      const next = Object.fromEntries(result);
+      if (!current()) return;
+      if (["owner"].includes(user.role)) next.users = await api("users");
+      if (user.role === "owner")
+        next.customerDirectory = await api("customer-directory");
+      if (["owner", "manager", "sales"].includes(user.role))
+        next.salesDirectory = await api("sales-directory");
+      if (current()) {
+        setReferenceDate(health.referenceDate);
+        setReference(health.referenceDate);
+        setData(next);
+      }
+    } catch (error) {
+      if (current()) throw error;
+    }
   }
   useEffect(() => {
     fetch("/api/v1/me")
@@ -572,6 +582,10 @@ function App() {
       });
     setRequestOpen(true);
   }
+  function openOrder(order: Row, scope: Row[] = [order]) {
+    setDetailIds(scope.map((row) => row.id));
+    setDetail({ ...order, detailKind: "orders" });
+  }
   function openTask(n: Row) {
     for (const kind of ["customers", "orders", "quotes"]) {
       const row = rows(kind).find((r) => r.id === n.entity);
@@ -579,7 +593,8 @@ function App() {
       if (kind === "customers") {
         go(kind);
         setQuery(row.id);
-      } else setDetail({ ...row, detailKind: kind });
+      } else if (kind === "orders") openOrder(row);
+      else setDetail({ ...row, detailKind: kind });
       return;
     }
     go("notifications");
@@ -1142,43 +1157,71 @@ function App() {
     </span>
   );
   const table = (heads: string[], body: React.ReactNode[][]) => (
-    <div className="table-scroll">
-      <table>
-        <thead>
-          <tr>
-            {heads.map((h) => (
-              <th key={h}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {body.map((r, i) => (
-            <tr key={i}>
-              {r.map((c, j) => (
-                <td key={j} data-label={heads[j]}>
-                  {c}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {!body.length && (
-        <div className="empty">
-          <Layers size={32} />
-          <h3>{T("这里还没有业务记录", "No records yet")}</h3>
-          <p>
-            {T(
-              "从创建第一条记录开始，进度会在这里汇总。",
-              "Create your first record to get started.",
-            )}
-          </p>
-        </div>
-      )}
-    </div>
+    <RecordsTable
+      heads={heads}
+      rows={body}
+      empty={
+        <EmptyState
+          filtered={Boolean(query.trim() || statusFilter !== "all")}
+          title={
+            query.trim() || statusFilter !== "all"
+              ? T("没有符合条件的记录", "No matching records")
+              : T("这里还没有业务记录", "No records yet")
+          }
+          description={
+            query.trim() || statusFilter !== "all"
+              ? T(
+                  "清除搜索和筛选后，可重新查看当前授权范围的记录。",
+                  "Clear your search and filters to see records available to your account.",
+                )
+              : portal && page === "orders"
+                ? T(
+                    "接受已发布报价后生成正式订单；已提交的采购需求显示在申请区。",
+                    "Accept a published quotation to create an order. Purchase requests appear in Submitted requests.",
+                  )
+                : portal && page === "quotes"
+                  ? T(
+                      "提交采购需求后，销售会准备报价；已发布的报价会显示在这里。",
+                      "Send a purchase request so sales can prepare a quotation. Published quotations will appear here.",
+                    )
+                  : T(
+                      "此处显示当前账号可查看的业务记录，可从使用指引查看下一步。",
+                      "This area shows records available to your account. Open Guide to find your next step.",
+                    )
+          }
+          action={
+            query.trim() || statusFilter !== "all"
+              ? {
+                  label: T("清除筛选", "Clear filters"),
+                  onClick: () => {
+                    setQuery("");
+                    setStatusFilter("all");
+                  },
+                }
+              : portal && ["orders", "quotes"].includes(page)
+                ? {
+                    label:
+                      page === "orders"
+                        ? T("查看报价", "View quotations")
+                        : T("选择产品", "Browse products"),
+                    onClick: () =>
+                      go(page === "orders" ? "quotes" : "products"),
+                  }
+                : {
+                    label: T("查看使用指引", "Open guide"),
+                    onClick: () =>
+                      setAux({
+                        kind: "guide",
+                        row: { id: T("使用指引", "Guide") },
+                      }),
+                  }
+          }
+        />
+      }
+    />
   );
   const showMoney = true;
-  return (
+  const workspace = (
     <div className={portal ? "workspace portal-layout" : "workspace"}>
       <a className="skip-link" href="#workspace-content">
         {T("跳转到页面内容", "Skip to content")}
@@ -1368,11 +1411,14 @@ function App() {
         </header>
         <div className="content" id="workspace-content" tabIndex={-1}>
           {!(portal && page === "products") && (
-            <div className="page-heading">
+            <div
+              className={
+                page === "dashboard"
+                  ? "page-heading overview-heading"
+                  : "page-heading"
+              }
+            >
               <div>
-                <div className="eyebrow">
-                  VESTA / {portal ? "CUSTOMER EXPERIENCE" : "SALES OPERATIONS"}
-                </div>
                 <h1>
                   {portal
                     ? T(...portalTitles[page])
@@ -1525,9 +1571,7 @@ function App() {
               en={en}
               onGo={go}
               onTask={openTask}
-              onOrder={(o) => {
-                setDetail({ ...o, detailKind: "orders" });
-              }}
+              onOrder={openOrder}
             />
           )}
           {summaries[page] && !portal && <Stats items={summaries[page]} />}
@@ -1753,12 +1797,39 @@ function App() {
           {page === "products" && portal && (
             <div className="product-grid">
               {!filtered("products").length && (
-                <p className="empty" role="status">
-                  {T(
-                    "没有匹配的产品，请尝试其他关键词或分类。",
-                    "No matching products. Try another search or category.",
-                  )}
-                </p>
+                <EmptyState
+                  filtered={Boolean(query || statusFilter !== "all")}
+                  title={
+                    query || statusFilter !== "all"
+                      ? T("没有匹配的产品", "No matching products")
+                      : T("暂无可选产品", "No products available")
+                  }
+                  description={
+                    query || statusFilter !== "all"
+                      ? T(
+                          "试试其他关键词，或清除筛选查看全部产品。",
+                          "Try another search or clear filters to see all products.",
+                        )
+                      : T(
+                          "可在公司资料查看专属联系人，确认产品供应情况。",
+                          "Find your contact in Company profile to ask about product availability.",
+                        )
+                  }
+                  action={
+                    query || statusFilter !== "all"
+                      ? {
+                          label: T("清除筛选", "Clear filters"),
+                          onClick: () => {
+                            setQuery("");
+                            setStatusFilter("all");
+                          },
+                        }
+                      : {
+                          label: T("联系资料", "Contact details"),
+                          onClick: () => go("profile"),
+                        }
+                  }
+                />
               )}
               {filtered("products").map((p, i) => (
                 <article className="product-card" key={p.id}>
@@ -1776,7 +1847,9 @@ function App() {
                   <div className="product-info">
                     <small>{categoryLabel(p.category, en)}</small>
                     <h2>{en ? p.en : p.name}</h2>
-                    <p>{en ? p.specEn || p.en : p.spec || p.en}</p>
+                    {(!en || p.specEn) && (
+                      <p>{en ? p.specEn : p.spec || p.en}</p>
+                    )}
                     <div className="product-meta">
                       <span>
                         {T("起订量", "MOQ")}{" "}
@@ -1817,6 +1890,7 @@ function App() {
                         btn(
                           T("加入需求清单", "Add to basket"),
                           () => {
+                            setBasketUndo(basket);
                             setBasket(
                               basket.some((i) => i.product === p.id)
                                 ? basket.map((i) =>
@@ -1826,7 +1900,11 @@ function App() {
                                   )
                                 : [...basket, { product: p.id, qty: p.moq }],
                             );
-                            setNotice(T("已加入需求清单", "Added to basket"));
+                            setNotice(
+                              en
+                                ? `${p.en || p.name}: ${p.moq} units added to your request.`
+                                : `${p.name}：已加入 ${p.moq} 件，可在清单中调整数量。`,
+                            );
                           },
                           true,
                         )}
@@ -1842,11 +1920,36 @@ function App() {
             <div className="basket-bar">
               <span>
                 {basket.length} {T("种商品", "products")} ·{" "}
-                {basket.reduce((s, i) => s + i.qty, 0)} {T("件", "units")}
+                <strong
+                  className="basket-count"
+                  key={basket.reduce((s, i) => s + i.qty, 0)}
+                >
+                  {basket.reduce((s, i) => s + i.qty, 0)}
+                </strong>{" "}
+                {T("件", "units")}
               </span>
-              <button className="btn primary" onClick={() => inquiry()}>
-                {T("查看清单并提交需求", "Review and submit")}
-              </button>
+              <div className="basket-actions">
+                {basketUndo && (
+                  <button
+                    className="btn"
+                    onClick={() => {
+                      setBasket(basketUndo);
+                      setBasketUndo(null);
+                      setNotice(
+                        T(
+                          "已撤销上次添加，清单已恢复。",
+                          "Last addition undone. Your previous basket is restored.",
+                        ),
+                      );
+                    }}
+                  >
+                    {T("撤销上次添加", "Undo last addition")}
+                  </button>
+                )}
+                <button className="btn primary" onClick={() => inquiry()}>
+                  {T("查看清单并提交需求", "Review and submit")}
+                </button>
+              </div>
             </div>
           )}
           {page === "data" && !portal && (
@@ -1899,9 +2002,7 @@ function App() {
               onFollow={follow}
               onEdit={createCustomer}
               onImport={() => setImportKind("customers")}
-              onOrder={(o) => {
-                setDetail({ ...o, detailKind: "orders" });
-              }}
+              onOrder={openOrder}
             />
           )}
           {page === "inquiries" && (
@@ -2135,7 +2236,9 @@ function App() {
                         ]
                       : []),
                     <div className="actions">
-                      {btn(T("查看详情", "View details"), () => setDetail(o))}
+                      {btn(T("查看详情", "View details"), () =>
+                        openOrder(o, filtered("orders").slice().reverse()),
+                      )}
                       {sales &&
                         o.status === "confirmed" &&
                         btn("跟进", () => follow(o, "orders"))}
@@ -2186,12 +2289,7 @@ function App() {
                           o.status !== "cancelled",
                       )
                       .map((o) => [
-                        <button
-                          className="link"
-                          onClick={() =>
-                            setDetail({ ...o, detailKind: "orders" })
-                          }
-                        >
+                        <button className="link" onClick={() => openOrder(o)}>
                           {o.id}
                           <small className="sub">{customer(o.customer)}</small>
                         </button>,
@@ -2379,7 +2477,11 @@ function App() {
                     openForm(
                       "人工汇率（管理）",
                       [
-                        { key: "rate", label: "1 USD = ? CNY", type: "number" },
+                        {
+                          key: "rate",
+                          label: "1 USD = ? CNY",
+                          type: "number",
+                        },
                         {
                           key: "date",
                           label: "数据日期",
@@ -2820,19 +2922,30 @@ function App() {
           portal={!!portal}
           en={en}
           items={basket}
-          setItems={setBasket}
+          setItems={(items) => {
+            setBasket(items);
+            setBasketUndo(null);
+          }}
           draft={requestDraft}
           onChange={setRequestDraft}
           onClose={() => setRequestOpen(false)}
           onDiscard={() => {
             setBasket([]);
+            setBasketUndo(null);
             setRequestDraft(null);
             setRequestOpen(false);
           }}
           submit={async (v) => {
             await run("inquiry-create", v);
             setBasket([]);
+            setBasketUndo(null);
             setRequestDraft(null);
+            setNotice(
+              T(
+                "采购需求已提交。可在“我的订单”的申请区查看，正式订单需确认已发布报价后生成。",
+                "Purchase request submitted. Find it in My orders under Submitted requests. A formal order requires accepting a published quotation.",
+              ),
+            );
           }}
         />
       )}
@@ -3165,7 +3278,11 @@ function App() {
           <section className="modal wide">
             <div className="modal-head">
               <div>
-                <small>{page === "quotes" ? "QUOTATION" : "SALES ORDER"}</small>
+                <small>
+                  {(detail.detailKind || page) === "quotes"
+                    ? "QUOTATION"
+                    : "SALES ORDER"}
+                </small>
                 <h2>
                   {(detail.detailKind || page) === "quotes"
                     ? T("报价详情", "Quotation details")
@@ -3181,6 +3298,19 @@ function App() {
                 <X />
               </button>
             </div>
+            {(detail.detailKind || page) === "orders" && (
+              <RecordNavigation
+                ids={detailIds.filter((id) =>
+                  rows("orders").some((row) => row.id === id),
+                )}
+                current={detail.id}
+                en={en}
+                onSelect={(id) => {
+                  const row = rows("orders").find((row) => row.id === id);
+                  if (row) setDetail({ ...row, detailKind: "orders" });
+                }}
+              />
+            )}
             <div className="modal-body">
               <BusinessDetail
                 record={detail}
@@ -3395,6 +3525,9 @@ function App() {
       )}
     </div>
   );
+  return (
+    <RecordsLanguage.Provider value={en}>{workspace}</RecordsLanguage.Provider>
+  );
 }
 function Login({
   onLogin,
@@ -3403,57 +3536,25 @@ function Login({
   onLogin: (v: any) => Promise<void>;
   error: string;
 }) {
-  const [username, setUsername] = useState("owner"),
-    [password, setPassword] = useState("VestaDemo2026!"),
+  const [username, setUsername] = useState(""),
+    [password, setPassword] = useState(""),
     [resetToken, setResetToken] = useState(
       new URLSearchParams(location.search).get("reset") || "",
     ),
     [localMessage, setLocalMessage] = useState(""),
     [busy, setBusy] = useState(false);
   return (
-    <div className="login">
+    <div className="login login-brand-page">
       <a className="skip-link" href="#login-form">
         跳转到登录表单
       </a>
-      <section className="login-story">
-        <div className="brand">
-          <span className="brand-symbol">V</span>
-          <div>
-            VESTA<small>TRADE WORKSPACE</small>
-          </div>
-        </div>
-        <div>
-          <span className="eyebrow">VESTA / 销售与客户协作</span>
-          <h1>
-            Vesta 外贸协作，
-            <br />
-            从询价到回款。
-          </h1>
-          <p>
-            团队跟进销售，客户查看订单。
-            <br />
-            在同一个工作空间，接续每一步业务。
-          </p>
-          <div className="login-stats">
-            <span>
-              01<small>询价与报价</small>
-            </span>
-            <span>
-              02<small>生产与交付</small>
-            </span>
-            <span>
-              03<small>核款与结清</small>
-            </span>
-          </div>
-        </div>
-        <small>VESTA · LOCAL DEMONSTRATION / 2026</small>
-      </section>
+      <LoginBrand />
       <section className="login-panel">
         <div className="login-card" id="login-form" tabIndex={-1}>
-          <span className="eyebrow">VESTA WORKSPACE</span>
-          <h2>{resetToken ? "设置新密码" : "登录工作空间"}</h2>
-          <p>选择演示角色，或使用你的账号继续工作。</p>
+          {resetToken && <h2>设置新密码</h2>}
           <form
+            aria-label={resetToken ? "设置新密码" : "登录"}
+            aria-busy={busy}
             onSubmit={async (e) => {
               e.preventDefault();
               setBusy(true);
@@ -3480,6 +3581,7 @@ function Login({
               账号
               <input
                 autoComplete="username"
+                disabled={busy}
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -3489,6 +3591,7 @@ function Login({
               密码
               <input
                 type="password"
+                disabled={busy}
                 autoComplete={resetToken ? "new-password" : "current-password"}
                 required
                 value={password}
@@ -3506,13 +3609,20 @@ function Login({
               </div>
             )}
             <button className="btn primary login-submit" disabled={busy}>
-              {busy ? "处理中…" : resetToken ? "保存新密码" : "进入工作空间"}
+              {busy
+                ? resetToken
+                  ? "正在保存…"
+                  : "正在验证账号…"
+                : resetToken
+                  ? "保存新密码"
+                  : "登录"}
               <ArrowUpRight size={18} />
             </button>
           </form>
           {!resetToken && (
             <button
               className="link section-gap"
+              disabled={busy}
               onClick={async () => {
                 try {
                   const r = await fetch("/api/v1/password/request", {
@@ -3527,461 +3637,10 @@ function Login({
                 }
               }}
             >
-              忘记密码？生成本地恢复邮件
+              忘记密码？
             </button>
           )}
-          <div className="demo-accounts">
-            <small>本地演示账号 · 密码 VestaDemo2026!</small>
-            <div>
-              {[
-                ["owner", "管理"],
-                ["manager", "经理"],
-                ["sales", "销售"],
-                ["buyer", "客户"],
-              ].map(([id, name]) => (
-                <button
-                  key={id}
-                  aria-pressed={username === id}
-                  onClick={() => setUsername(id)}
-                  className={username === id ? "selected" : ""}
-                >
-                  {name}
-                  <small>{id}</small>
-                </button>
-              ))}
-            </div>
-          </div>
-          <p className="login-security">
-            <Shield size={15} />
-            仅本机访问 · 所有数据均为虚构样例
-          </p>
         </div>
-      </section>
-    </div>
-  );
-}
-function FormModal({
-  en,
-  form,
-  products,
-  rates,
-  orders,
-  onClose,
-  onError,
-  onSuccess,
-}: {
-  en: boolean;
-  form: Form;
-  products: Row[];
-  rates: Row[];
-  orders: { value: string; label: string }[];
-  onClose: () => void;
-  onError: (v: string) => void;
-  onSuccess: () => void;
-}) {
-  const [values, setValues] = useState<any>(() =>
-      Object.fromEntries(
-        form.fields.map((f) => [f.key, f.value ?? f.options?.[0]?.value ?? ""]),
-      ),
-    ),
-    [items, setItems] = useState<any[]>(form.items || []),
-    [allocations, setAllocations] = useState(form.allocations || []),
-    [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
-  const quoteFx = values.fxId
-    ? rates.find((r) => r.id === values.fxId)
-    : products[0]?.pricingFx;
-  const canConvert =
-    quoteFx &&
-    !quoteFx.invalid &&
-    Number.isFinite(Number(quoteFx.rate)) &&
-    Number(quoteFx.rate) > 0;
-  const referenceUnit = (p: Row) =>
-    values.currency === "USD"
-      ? canConvert
-        ? new Decimal(p.price).div(quoteFx.rate).toDecimalPlaces(2).toNumber()
-        : null
-      : p.price;
-  return (
-    <div className="modal-backdrop">
-      <section className="modal wide">
-        <div className="modal-head">
-          <h2>{form.title}</h2>
-          <button
-            className="icon-btn"
-            aria-label={en ? "Close" : "关闭"}
-            onClick={onClose}
-          >
-            <X />
-          </button>
-        </div>
-        <form
-          onSubmit={async (e) => {
-            e.preventDefault();
-            setBusy(true);
-            setError("");
-            try {
-              await form.submit({
-                ...values,
-                ...(form.quote ? { items } : {}),
-                ...(form.allocations ? { allocations } : {}),
-              });
-              onSuccess();
-            } catch (e) {
-              setError((e as Error).message);
-              onError((e as Error).message);
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          <div className="modal-body">
-            <div className="form-grid">
-              {form.fields.map((f) => (
-                <React.Fragment key={f.key}>
-                  {f.section && (
-                    <h3 className="full form-section-heading">{f.section}</h3>
-                  )}
-                  <label className={f.type === "textarea" ? "full" : ""}>
-                    {f.label}
-                    {f.required !== false ? " *" : ""}
-                    {f.options ? (
-                      <select
-                        value={values[f.key]}
-                        onChange={(e) => {
-                          if (
-                            form.quote &&
-                            f.key === "currency" &&
-                            values.currency !== e.target.value
-                          ) {
-                            const fx = values.fxId
-                              ? rates.find((r) => r.id === values.fxId)
-                              : products[0]?.pricingFx;
-                            if (
-                              !fx ||
-                              fx.invalid ||
-                              !Number.isFinite(Number(fx.rate)) ||
-                              Number(fx.rate) <= 0
-                            ) {
-                              setError(
-                                "没有有效汇率，无法切换报价币种 / No valid exchange rate",
-                              );
-                              return;
-                            }
-                            const convert = (n: any) =>
-                              (e.target.value === "USD"
-                                ? new Decimal(n || 0).div(fx.rate)
-                                : new Decimal(n || 0).times(fx.rate)
-                              )
-                                .toDecimalPlaces(2)
-                                .toNumber();
-                            setItems(
-                              items.map((i) => ({
-                                ...i,
-                                price: convert(i.price),
-                              })),
-                            );
-                            setValues({
-                              ...values,
-                              currency: e.target.value,
-                              fxId: fx.id,
-                              freight: convert(values.freight),
-                              fees: convert(values.fees),
-                              discount: convert(values.discount),
-                            });
-                            setError("");
-                          } else
-                            setValues({ ...values, [f.key]: e.target.value });
-                        }}
-                        required={f.required !== false}
-                      >
-                        {f.options.map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </select>
-                    ) : f.type === "textarea" ? (
-                      <textarea
-                        value={values[f.key]}
-                        onChange={(e) =>
-                          setValues({ ...values, [f.key]: e.target.value })
-                        }
-                        required={f.required !== false}
-                      />
-                    ) : (
-                      <input
-                        type={f.type || "text"}
-                        step={f.type === "number" ? "any" : undefined}
-                        value={values[f.key]}
-                        onChange={(e) =>
-                          setValues({ ...values, [f.key]: e.target.value })
-                        }
-                        required={f.required !== false}
-                      />
-                    )}
-                  </label>
-                </React.Fragment>
-              ))}
-            </div>
-            {form.allocations && (
-              <div className="quote-lines">
-                <h3>按订单分配收款（同一客户、相同币种）</h3>
-                {allocations.map((a, i) => (
-                  <div className="quote-line" key={i}>
-                    <select
-                      aria-label="核销订单"
-                      value={a.order}
-                      onChange={(e) =>
-                        setAllocations(
-                          allocations.map((x, j) =>
-                            j === i ? { ...x, order: e.target.value } : x,
-                          ),
-                        )
-                      }
-                    >
-                      {orders.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                    <label>
-                      分配金额
-                      <input
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        value={a.amount}
-                        onChange={(e) =>
-                          setAllocations(
-                            allocations.map((x, j) =>
-                              j === i
-                                ? { ...x, amount: Number(e.target.value) }
-                                : x,
-                            ),
-                          )
-                        }
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      className="icon-btn"
-                      disabled={allocations.length === 1}
-                      aria-label={
-                        en
-                          ? `Remove allocation ${i + 1}`
-                          : `移除第${i + 1}项核销`
-                      }
-                      onClick={() =>
-                        setAllocations(allocations.filter((_, j) => i !== j))
-                      }
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-                ))}
-                <button
-                  className="btn"
-                  type="button"
-                  onClick={() => {
-                    const o = orders.find(
-                      (o) => !allocations.some((a) => a.order === o.value),
-                    );
-                    if (o)
-                      setAllocations([
-                        ...allocations,
-                        { order: o.value, amount: 0 },
-                      ]);
-                  }}
-                >
-                  增加订单分配
-                </button>
-                <p className="section-gap muted">
-                  已分配{" "}
-                  {allocations.reduce((sum, a) => sum + a.amount, 0).toFixed(2)}
-                  ；分配总额不能超过本笔收款。
-                </p>
-              </div>
-            )}
-            {form.quote && (
-              <div className="quote-lines">
-                <h3>报价商品 / Quotation lines</h3>
-                <p className="muted">
-                  {canConvert
-                    ? "1 USD = " +
-                      quoteFx.rate +
-                      " CNY · " +
-                      quoteFx.date +
-                      " · " +
-                      quoteFx.source
-                    : "无可用汇率 / No valid exchange rate"}
-                </p>
-                <button
-                  type="button"
-                  className="btn"
-                  disabled={values.currency === "USD" && !canConvert}
-                  onClick={() =>
-                    setItems(
-                      items.map((i) => {
-                        const p = products.find((p) => p.id === i.product);
-                        return p ? { ...i, price: referenceUnit(p) } : i;
-                      }),
-                    )
-                  }
-                >
-                  按所选汇率采用当前产品参考价 / Apply reference prices
-                </button>
-                <p className="muted">
-                  已录入单价不会因后台汇率更新自动变化；采用参考价会替换本草稿商品单价。
-                </p>
-                <p className="notice-box">
-                  合计 / Total:{" "}
-                  {money(
-                    items.reduce(
-                      (s, i) => s + Number(i.qty) * Number(i.price),
-                      0,
-                    ) +
-                      Number(values.freight || 0) +
-                      Number(values.fees || 0) -
-                      Number(values.discount || 0),
-                    values.currency || "CNY",
-                  )}{" "}
-                  · 预付款 / Deposit:{" "}
-                  {money(
-                    ((items.reduce(
-                      (s, i) => s + Number(i.qty) * Number(i.price),
-                      0,
-                    ) +
-                      Number(values.freight || 0) +
-                      Number(values.fees || 0) -
-                      Number(values.discount || 0)) *
-                      Number(values.depositPct || 0)) /
-                      100,
-                    values.currency || "CNY",
-                  )}
-                </p>
-                {items.map((i, index) => (
-                  <div className="quote-line" key={index}>
-                    <select
-                      aria-label="商品"
-                      value={i.product}
-                      onChange={(e) => {
-                        const p = products.find(
-                          (p) => p.id === e.target.value,
-                        )!;
-                        setItems(
-                          items.map((x, n) =>
-                            n === index
-                              ? {
-                                  product: p.id,
-                                  qty: p.moq,
-                                  price: referenceUnit(p),
-                                }
-                              : x,
-                          ),
-                        );
-                      }}
-                    >
-                      {products.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.sku} · {p.name}
-                        </option>
-                      ))}
-                    </select>
-                    <label>
-                      数量
-                      <input
-                        aria-label="数量"
-                        type="number"
-                        min="1"
-                        step="1"
-                        value={i.qty}
-                        onChange={(e) =>
-                          setItems(
-                            items.map((x, n) =>
-                              n === index
-                                ? { ...x, qty: Number(e.target.value) }
-                                : x,
-                            ),
-                          )
-                        }
-                      />
-                    </label>
-                    <label>
-                      单价
-                      <input
-                        aria-label="单价"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={i.price ?? ""}
-                        onChange={(e) =>
-                          setItems(
-                            items.map((x, n) =>
-                              n === index
-                                ? { ...x, price: Number(e.target.value) }
-                                : x,
-                            ),
-                          )
-                        }
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      className="icon-btn"
-                      disabled={items.length === 1}
-                      aria-label={
-                        en
-                          ? `Remove product ${index + 1}`
-                          : `移除第${index + 1}项商品`
-                      }
-                      onClick={() =>
-                        setItems(items.filter((_, n) => n !== index))
-                      }
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => {
-                    const p = products.find(
-                      (p) => !items.some((i) => i.product === p.id),
-                    );
-                    if (p)
-                      setItems([
-                        ...items,
-                        {
-                          product: p.id,
-                          qty: p.moq,
-                          price: referenceUnit(p),
-                        },
-                      ]);
-                  }}
-                >
-                  <Plus size={15} />
-                  增加商品
-                </button>
-              </div>
-            )}
-            {error && (
-              <div role="alert" className="alert error section-gap">
-                {error}
-              </div>
-            )}
-          </div>
-          <div className="modal-actions">
-            <button type="button" className="btn" onClick={onClose}>
-              取消 / Cancel
-            </button>
-            <button className="btn primary" disabled={busy}>
-              {busy ? "保存中…" : "确认保存 / Save"}
-            </button>
-          </div>
-        </form>
       </section>
     </div>
   );

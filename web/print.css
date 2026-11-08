@@ -343,52 +343,6 @@
     font-weight: 600;
     margin-top: 28px;
   }
-  .orbit {
-    width: 250px;
-    height: 250px;
-    border: 1px solid #c6d1ba;
-    border-radius: 50%;
-    display: grid;
-    place-items: center;
-    margin: -30px 20px;
-    position: relative;
-    transform: rotate(-13deg);
-  }
-  .orbit:before {
-    content: "";
-    position: absolute;
-    width: 170px;
-    height: 250px;
-    border: 1px solid #c6d1ba;
-    border-radius: 50%;
-  }
-  .orbit:after {
-    content: "";
-    position: absolute;
-    width: 250px;
-    height: 95px;
-    border: 1px solid #c6d1ba;
-    border-radius: 50%;
-  }
-  .orbit > div {
-    font-family: Georgia, serif;
-    font-size: 80px;
-    color: #789267;
-    transform: rotate(13deg);
-    line-height: 1;
-    text-align: center;
-    background: #e7eee2;
-    z-index: 1;
-    padding: 0 18px;
-  }
-  .orbit span {
-    display: block;
-    font-family: inherit;
-    font-size: 7px;
-    letter-spacing: 2px;
-    line-height: 1.7;
-    margin-top: 7px;
-  }
   .metrics {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -913,7 +867,7 @@
     margin-top: 46px;
   }
   .login-stats > span {
-    font-family: Georgia, serif;
+    font-family: inherit;
     font-size: 30px;
     color: #9ab69c;
   }
@@ -1042,9 +996,6 @@
     .metric-icon svg {
       width: 16px;
     }
-    .orbit {
-      margin-right: -50px;
-    }
     .product-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -1084,9 +1035,6 @@
     }
     .welcome h2 {
       font-size: 22px;
-    }
-    .orbit {
-      display: none;
     }
     .metrics {
       grid-template-columns: 1fr 1fr;
